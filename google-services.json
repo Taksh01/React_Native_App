@@ -1,0 +1,36 @@
+{
+  "project_info": {
+    "project_number": "117375280062",
+    "project_id": "gts-app-ce5ca",
+    "storage_bucket": "gts-app-ce5ca.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:117375280062:android:d6a662d1a1ce5807c18fef",
+        "android_client_info": {
+          "package_name": "com.gtsapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCCXl5ULcFZVN6FMQZPX4BieJklUD4_1NI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        },
+        "analytics_service": {
+          "status": 1
+        },
+        "cloud_messaging": {
+          "status": 2,
+          "apns_config": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

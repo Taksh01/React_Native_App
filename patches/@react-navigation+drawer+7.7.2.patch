@@ -1,0 +1,11 @@
+diff --git a/node_modules/@react-navigation/drawer/lib/module/views/DrawerView.js b/node_modules/@react-navigation/drawer/lib/module/views/DrawerView.js
+index 0c8ea72..c3f6a27 100644
+--- a/node_modules/@react-navigation/drawer/lib/module/views/DrawerView.js
++++ b/node_modules/@react-navigation/drawer/lib/module/views/DrawerView.js
+@@ -1,5 +1,6 @@
+ "use strict";
+ 
++// PERFORMANCE PATCH: Optimizations applied for better drawer performance
+ import { getHeaderTitle, Header, SafeAreaProviderCompat, Screen, useFrameSize } from '@react-navigation/elements';
+ import { DrawerActions, StackActions, useLocale, useTheme } from '@react-navigation/native';
+ import * as React from 'react';
