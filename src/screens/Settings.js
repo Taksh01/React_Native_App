@@ -69,7 +69,7 @@ export default function SettingsScreen() {
             </Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.itemLabel}>Device Token</Text>
+            <Text style={styles.itemLabel}>Device Tokens</Text>
             <Text style={styles.data}>
               {NotificationService.deviceToken ?? "Not available"}
             </Text>
