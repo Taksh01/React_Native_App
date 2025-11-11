@@ -18,8 +18,7 @@ web-build/
 *.key
 *.mobileprovision
 gts-app-ce5ca-firebase-adminsdk-fbsvc-560c4032e5.json
-*firebase-adminsdk-*.json
-serviceAccount*.json
+
 
 # Metro
 .metro-health-check*
