@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -24,8 +30,7 @@ const createClusterForm = (cluster) => {
   const mapped = dbsStations.map((station) => ({
     id: station.id || "",
     name: station.name || "",
-    capacity:
-      station.capacity != null ? String(station.capacity) : "",
+    capacity: station.capacity != null ? String(station.capacity) : "",
   }));
   if (mapped.length === 0) {
     mapped.push({ id: "", name: "", capacity: "" });
@@ -481,10 +486,7 @@ export default function ClusterManagement() {
     staleTime: 30 * 1000,
   });
 
-  const clusters = useMemo(
-    () => clusterData?.clusters || [],
-    [clusterData]
-  );
+  const clusters = useMemo(() => clusterData?.clusters || [], [clusterData]);
 
   const updateClusterMutation = useMutation({
     mutationFn: ({ clusterId, payload }) =>
@@ -502,28 +504,22 @@ export default function ClusterManagement() {
     Promise.all(tasks).catch(() => undefined);
   }, [refetch, refetchPermissions, user?.id]);
 
-  const openEditModal = useCallback(
-    (cluster) => {
-      setSelectedCluster(cluster);
-      setClusterForm(createClusterForm(cluster));
-      setShowEditModal(true);
-    },
-    []
-  );
+  const openEditModal = useCallback((cluster) => {
+    setSelectedCluster(cluster);
+    setClusterForm(createClusterForm(cluster));
+    setShowEditModal(true);
+  }, []);
 
-  const openAddModal = useCallback(
-    (cluster) => {
-      setSelectedCluster(cluster);
-      const form = createClusterForm(cluster);
-      form.dbsStations = [
-        ...form.dbsStations,
-        { id: "", name: "", capacity: "" },
-      ];
-      setClusterForm(form);
-      setShowEditModal(true);
-    },
-    []
-  );
+  const openAddModal = useCallback((cluster) => {
+    setSelectedCluster(cluster);
+    const form = createClusterForm(cluster);
+    form.dbsStations = [
+      ...form.dbsStations,
+      { id: "", name: "", capacity: "" },
+    ];
+    setClusterForm(form);
+    setShowEditModal(true);
+  }, []);
 
   const handleClusterChange = (index, field, value) => {
     setClusterForm((prev) => {
@@ -538,10 +534,7 @@ export default function ClusterManagement() {
 
   const addDbsRow = () => {
     setClusterForm((prev) => ({
-      dbsStations: [
-        ...prev.dbsStations,
-        { id: "", name: "", capacity: "" },
-      ],
+      dbsStations: [...prev.dbsStations, { id: "", name: "", capacity: "" }],
     }));
   };
 
@@ -613,7 +606,9 @@ export default function ClusterManagement() {
 
         <View style={styles.msCard}>
           <Text style={styles.msTitle}>{ms.name || ms.id}</Text>
-          <Text style={styles.msMeta}>Location: {ms.location || "Unknown"}</Text>
+          <Text style={styles.msMeta}>
+            Location: {ms.location || "Unknown"}
+          </Text>
           <Text style={styles.msMeta}>
             Capacity: {ms.capacity != null ? ms.capacity : "—"} scm
           </Text>
@@ -621,7 +616,9 @@ export default function ClusterManagement() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Distribution Stations ({dbsStations.length})</Text>
+            <Text style={styles.sectionTitle}>
+              Distribution Stations ({dbsStations.length})
+            </Text>
             {canManageClusters && (
               <TouchableOpacity
                 style={styles.addDbsButton}
@@ -641,7 +638,9 @@ export default function ClusterManagement() {
                     </Text>
                     <Text style={styles.dbsCardId}>{station.id}</Text>
                     <Text style={styles.dbsCardCapacity}>
-                      {station.capacity != null ? `${station.capacity} scm` : "No capacity"}
+                      {station.capacity != null
+                        ? `${station.capacity} scm`
+                        : "No capacity"}
                     </Text>
                   </View>
                   {canManageClusters && (
@@ -679,7 +678,10 @@ export default function ClusterManagement() {
     if (isLoading && clusters.length === 0) {
       return (
         <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color={themeRef.current?.colors?.loaderPrimary || "#1d4ed8"} />
+          <ActivityIndicator
+            size="large"
+            color={themeRef.current?.colors?.loaderPrimary || "#1d4ed8"}
+          />
           <Text style={styles.loaderText}>Loading cluster topology…</Text>
         </View>
       );
@@ -731,7 +733,7 @@ export default function ClusterManagement() {
       animationType="slide"
       onRequestClose={() => setShowEditModal(false)}
     >
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.modalOverlay}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
@@ -743,7 +745,8 @@ export default function ClusterManagement() {
         >
           <Text style={styles.modalTitle}>Manage DBS Stations</Text>
           <Text style={styles.modalSubtitle}>
-            Add, edit, or remove DBS stations for this cluster. Changes will be saved immediately.
+            Add, edit, or remove DBS stations for this cluster. Changes will be
+            saved immediately.
           </Text>
 
           <View style={styles.formGroup}>
@@ -803,8 +806,13 @@ export default function ClusterManagement() {
                 </View>
               </View>
             ))}
-            <TouchableOpacity style={styles.addStationButton} onPress={addDbsRow}>
-              <Text style={styles.addStationText}>+ Add Another DBS Station</Text>
+            <TouchableOpacity
+              style={styles.addStationButton}
+              onPress={addDbsRow}
+            >
+              <Text style={styles.addStationText}>
+                + Add Another DBS Station
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -822,7 +830,9 @@ export default function ClusterManagement() {
               disabled={updateClusterMutation.isPending}
             >
               {updateClusterMutation.isPending ? (
-                <ActivityIndicator color={themeRef.current?.colors?.surfaceElevated || "#ffffff"} />
+                <ActivityIndicator
+                  color={themeRef.current?.colors?.surfaceElevated || "#ffffff"}
+                />
               ) : (
                 <Text style={styles.saveButtonText}>Save Changes</Text>
               )}
@@ -834,13 +844,13 @@ export default function ClusterManagement() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       <View style={styles.header}>
-        <Text style={styles.screenTitle}>Cluster Management</Text>
+        {/* <Text style={styles.screenTitle}>Cluster Management</Text>
         <Text style={styles.screenSubtitle}>
           Central view of MS hubs and their DBS satellites. Update alignments
           as network topology evolves.
-        </Text>
+        </Text> */}
       </View>
 
       {renderPermissionsBanner()}
@@ -849,5 +859,3 @@ export default function ClusterManagement() {
     </SafeAreaView>
   );
 }
-
-

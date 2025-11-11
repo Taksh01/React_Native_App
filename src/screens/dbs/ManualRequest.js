@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  Modal,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -20,8 +21,12 @@ export default function ManualRequest() {
   const [qty, setQty] = useState("");
   const qtyRef = useRef(null);
   const [requiredBy, setRequiredBy] = useState(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
+  // const [showDatePicker, setShowDatePicker] = useState(false);
+  // const [showTimePicker, setShowTimePicker] = useState(false);
+
+  const [pickerMode, setPickerMode] = useState(null); // "date" | "time" | null
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [tempDate, setTempDate] = useState(new Date());
 
   const formatDate = (d) =>
     d?.toLocaleDateString("en-IN", {
@@ -32,6 +37,40 @@ export default function ManualRequest() {
   const formatTime = (d) =>
     d?.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) ??
     "";
+
+  const openPicker = (mode) => {
+    setPickerMode(mode);
+    setTempDate(requiredBy ?? new Date());
+    setPickerVisible(true);
+  };
+
+  const onTempChange = (_event, date) => {
+    if (date) setTempDate(date);
+  };
+
+  const onPickerDone = () => {
+    const base = requiredBy ?? new Date();
+    const next = new Date(base);
+
+    if (pickerMode === "date") {
+      next.setFullYear(
+        tempDate.getFullYear(),
+        tempDate.getMonth(),
+        tempDate.getDate()
+      );
+    } else if (pickerMode === "time") {
+      next.setHours(tempDate.getHours(), tempDate.getMinutes(), 0, 0);
+    }
+
+    setRequiredBy(next);
+    setPickerVisible(false);
+    setPickerMode(null);
+  };
+
+  const onPickerCancel = () => {
+    setPickerVisible(false);
+    setPickerMode(null);
+  };
 
   const onSelectDate = (_event, date) => {
     setShowDatePicker(false);
@@ -136,6 +175,56 @@ export default function ManualRequest() {
         fontSize: theme.typography.sizes.body,
         color: theme.colors.textPrimary,
       },
+
+      // ⬇ add below your existing styles inside StyleSheet.create({...})
+      modalBackdrop: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.35)",
+        justifyContent: "flex-end",
+      },
+      modalSheet: {
+        backgroundColor: theme.colors.surfaceElevated,
+        borderTopLeftRadius: theme.radii.xl,
+        borderTopRightRadius: theme.radii.xl,
+        padding: theme.spacing(4),
+      },
+      modalHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: theme.spacing(2),
+      },
+      modalTitle: {
+        fontSize: theme.typography.sizes.subheading,
+        fontWeight: theme.typography.weightBold,
+        color: theme.colors.textPrimary,
+      },
+      modalActions: {
+        flexDirection: "row",
+        gap: theme.spacing(2),
+      },
+      actionBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: theme.radii.lg,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: theme.colors.borderMuted,
+      },
+      actionPrimary: {
+        backgroundColor: theme.colors.primary,
+        borderColor: theme.colors.primary,
+      },
+      actionText: {
+        color: theme.colors.textPrimary,
+        fontWeight: theme.typography.weightMedium,
+      },
+      actionTextPrimary: {
+        color: theme.colors.onPrimary ?? "#fff",
+        fontWeight: theme.typography.weightBold,
+      },
+      pickerWrap: {
+        paddingVertical: theme.spacing(2),
+      },
     })
   );
 
@@ -229,7 +318,7 @@ export default function ManualRequest() {
               <Text style={styles.inputLabel}>Required by</Text>
 
               <View style={styles.row}>
-                <TouchableOpacity
+                {/* <TouchableOpacity
                   activeOpacity={0.8}
                   style={[styles.touchField, styles.half]}
                   onPress={() => setShowDatePicker(true)}
@@ -253,6 +342,32 @@ export default function ManualRequest() {
                       {requiredBy ? formatTime(requiredBy) : "Pick time"}
                     </Text>
                   </View>
+                </TouchableOpacity> */}
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={[styles.touchField, styles.half]}
+                  onPress={() => openPicker("date")}
+                >
+                  <View style={styles.touchFieldInner}>
+                    <AppIcon icon="calendar" size={18} color="#1e293b" />
+                    <Text style={styles.touchFieldText}>
+                      {requiredBy ? formatDate(requiredBy) : "Pick date"}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={[styles.touchField, styles.half]}
+                  onPress={() => openPicker("time")}
+                >
+                  <View style={styles.touchFieldInner}>
+                    <AppIcon icon="clock" size={18} color="#1e293b" />
+                    <Text style={styles.touchFieldText}>
+                      {requiredBy ? formatTime(requiredBy) : "Pick time"}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               </View>
 
@@ -260,7 +375,7 @@ export default function ManualRequest() {
                 Select the latest date & time by which delivery is needed
               </Text>
 
-              {showDatePicker && (
+              {/* {showDatePicker && (
                 <DateTimePicker
                   value={requiredBy ?? new Date()}
                   mode="date"
@@ -278,7 +393,7 @@ export default function ManualRequest() {
                   onChange={onSelectTime}
                   minuteInterval={5}
                 />
-              )}
+              )} */}
             </View>
 
             <AppButton
@@ -289,6 +404,48 @@ export default function ManualRequest() {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={pickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={onPickerCancel}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {pickerMode === "date" ? "Select Date" : "Select Time"}
+              </Text>
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={onPickerCancel}
+                >
+                  <Text style={styles.actionText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionPrimary]}
+                  onPress={onPickerDone}
+                >
+                  <Text style={styles.actionTextPrimary}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.pickerWrap}>
+              <DateTimePicker
+                value={tempDate}
+                mode={pickerMode ?? "date"}
+                display={Platform.OS === "ios" ? "spinner" : "spinner"} // keep it open
+                onChange={onTempChange}
+                {...(pickerMode === "date" ? { minimumDate: new Date() } : {})}
+                minuteInterval={5}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

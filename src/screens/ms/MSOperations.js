@@ -513,10 +513,10 @@ export default function MSOperations() {
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
-            <Text style={styles.title}>MS Operations</Text>
+            {/* <Text style={styles.title}>MS Operations</Text>
             <Text style={styles.subtitle}>
               Manage truck arrivals and meter readings
-            </Text>
+            </Text> */}
           </View>
 
           {/* Token Status */}

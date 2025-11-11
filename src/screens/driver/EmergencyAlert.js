@@ -1,12 +1,12 @@
 ﻿import React, { useState, useRef } from "react";
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  Alert, 
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Alert,
   StyleSheet,
   ScrollView,
-  ActivityIndicator 
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AppIcon from "../../components/AppIcon";
@@ -15,13 +15,48 @@ import { driverApi } from "../../lib/driverApi";
 import { useAuth } from "../../store/auth";
 
 const EMERGENCY_TYPES = [
-  { id: "gas_leakage", title: "Gas Leakage", icon: "emergencyGas", color: "#FF3B30" },
-  { id: "tyre_puncture", title: "Tyre Puncture", icon: "emergencyTyre", color: "#FF9500" },
-  { id: "engine_problem", title: "Engine Problem", icon: "emergencyEngine", color: "#FF9500" },
-  { id: "accident", title: "Accident", icon: "emergencyAccident", color: "#FF3B30" },
-  { id: "vehicle_breakdown", title: "Vehicle Breakdown", icon: "emergencyBreakdown", color: "#FF9500" },
-  { id: "medical_emergency", title: "Medical Emergency", icon: "emergencyMedical", color: "#FF3B30" },
-  { id: "security_issue", title: "Security Issue", icon: "emergencySecurity", color: "#FF3B30" },
+  {
+    id: "gas_leakage",
+    title: "Gas Leakage",
+    icon: "emergencyGas",
+    color: "#FF3B30",
+  },
+  {
+    id: "tyre_puncture",
+    title: "Tyre Puncture",
+    icon: "emergencyTyre",
+    color: "#FF9500",
+  },
+  {
+    id: "engine_problem",
+    title: "Engine Problem",
+    icon: "emergencyEngine",
+    color: "#FF9500",
+  },
+  {
+    id: "accident",
+    title: "Accident",
+    icon: "emergencyAccident",
+    color: "#FF3B30",
+  },
+  {
+    id: "vehicle_breakdown",
+    title: "Vehicle Breakdown",
+    icon: "emergencyBreakdown",
+    color: "#FF9500",
+  },
+  {
+    id: "medical_emergency",
+    title: "Medical Emergency",
+    icon: "emergencyMedical",
+    color: "#FF3B30",
+  },
+  {
+    id: "security_issue",
+    title: "Security Issue",
+    icon: "emergencySecurity",
+    color: "#FF3B30",
+  },
   { id: "other", title: "Other Issue", icon: "info", color: "#8E8E93" },
 ];
 
@@ -57,12 +92,12 @@ export default function EmergencyAlert({ navigation, route }) {
         padding: theme.spacing(4),
       },
       header: {
-        alignItems: 'center',
+        alignItems: "center",
         marginBottom: theme.spacing(6),
       },
       headerIconRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: "row",
+        alignItems: "center",
         marginBottom: theme.spacing(4),
       },
       headerIcon: {
@@ -77,13 +112,13 @@ export default function EmergencyAlert({ navigation, route }) {
       subtitle: {
         fontSize: theme.typography.sizes.body,
         color: theme.colors.textSecondary,
-        textAlign: 'center',
+        textAlign: "center",
         marginBottom: theme.spacing(2),
       },
       warningRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
       },
       warningIcon: {
         marginRight: theme.spacing(2),
@@ -92,7 +127,7 @@ export default function EmergencyAlert({ navigation, route }) {
         fontSize: theme.typography.sizes.body,
         color: theme.colors.emergencyOrange,
         fontWeight: theme.typography.weightSemiBold,
-        textAlign: 'center',
+        textAlign: "center",
       },
       emergencyGrid: {
         gap: theme.spacing(3),
@@ -101,16 +136,16 @@ export default function EmergencyAlert({ navigation, route }) {
         backgroundColor: theme.colors.surfaceElevated,
         borderRadius: theme.radii.lg,
         padding: theme.spacing(4),
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
         borderWidth: 1,
         borderColor: theme.colors.borderSubtle,
         ...theme.shadows.level1,
       },
       emergencyContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: "row",
+        alignItems: "center",
         flex: 1,
       },
       emergencyIcon: {
@@ -126,7 +161,7 @@ export default function EmergencyAlert({ navigation, route }) {
       },
       footer: {
         marginTop: theme.spacing(8),
-        alignItems: 'center',
+        alignItems: "center",
       },
       cancelButton: {
         backgroundColor: theme.colors.neutralGray,
@@ -141,8 +176,8 @@ export default function EmergencyAlert({ navigation, route }) {
       },
       loadingContainer: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
+        justifyContent: "center",
+        alignItems: "center",
         padding: theme.spacing(8),
       },
       loadingText: {
@@ -150,26 +185,34 @@ export default function EmergencyAlert({ navigation, route }) {
         fontWeight: theme.typography.weightSemiBold,
         color: theme.colors.emergency,
         marginTop: theme.spacing(4),
-        textAlign: 'center',
+        textAlign: "center",
       },
       loadingSubtext: {
         fontSize: theme.typography.sizes.body,
         color: theme.colors.textSecondary,
         marginTop: theme.spacing(2),
-        textAlign: 'center',
+        textAlign: "center",
       },
     });
   });
 
   const handleEmergencySelect = (emergency) => {
     setSelectedEmergency(emergency);
-    
+
     Alert.alert(
       emergency.title,
       "Are you sure you want to report this emergency? This will immediately notify the control center.",
       [
-        { text: "Cancel", style: "cancel", onPress: () => setSelectedEmergency(null) },
-        { text: "Report Emergency", style: "destructive", onPress: () => reportEmergency(emergency) }
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => setSelectedEmergency(null),
+        },
+        {
+          text: "Report Emergency",
+          style: "destructive",
+          onPress: () => reportEmergency(emergency),
+        },
       ]
     );
   };
@@ -229,15 +272,26 @@ export default function EmergencyAlert({ navigation, route }) {
         />
         <Text style={styles.emergencyTitle}>{emergency.title}</Text>
       </View>
-      <AppIcon icon="chevronRight" size={20} color={themeRef.current?.colors?.slateIcon || "#94a3b8"} style={styles.emergencyArrow} />
+      <AppIcon
+        icon="chevronRight"
+        size={20}
+        color={themeRef.current?.colors?.slateIcon || "#94a3b8"}
+        style={styles.emergencyArrow}
+      />
     </TouchableOpacity>
   );
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        edges={["left", "right", "bottom"]}
+        style={styles.container}
+      >
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={themeRef.current?.colors?.emergency || "#FF3B30"} />
+          <ActivityIndicator
+            size="large"
+            color={themeRef.current?.colors?.emergency || "#FF3B30"}
+          />
           <Text style={styles.loadingText}>Reporting Emergency...</Text>
           <Text style={styles.loadingSubtext}>
             Notifying control center and emergency services
@@ -248,7 +302,7 @@ export default function EmergencyAlert({ navigation, route }) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView edges={["left", "right", "bottom"]} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <View style={styles.headerIconRow}>
@@ -270,7 +324,9 @@ export default function EmergencyAlert({ navigation, route }) {
               color={themeRef.current?.colors?.emergencyOrange || "#FF9500"}
               style={styles.warningIcon}
             />
-            <Text style={styles.warningText}>Only use for genuine emergencies</Text>
+            <Text style={styles.warningText}>
+              Only use for genuine emergencies
+            </Text>
           </View>
         </View>
 
@@ -279,7 +335,7 @@ export default function EmergencyAlert({ navigation, route }) {
         </View>
 
         <View style={styles.footer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.cancelButton}
             onPress={() => navigation.goBack()}
           >

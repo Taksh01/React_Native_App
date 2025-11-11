@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Pressable,
 } from "react-native";
+import { formatStatusLabel } from "../lib/tripStatus";
 import { useThemedStyles } from "../theme";
 import AppIcon from "./AppIcon";
 
@@ -210,44 +211,101 @@ export default function TripDetailsModal({ visible, trip, onClose }) {
 
   if (!trip) return null;
 
-  const getNormalizedStatus = () => {
-    const status = String(trip.status || "").toUpperCase();
-
-    if (
-      status.includes("COMPLETED") ||
-      status.includes("DELIVERED") ||
-      status.includes("CONFIRMED")
-    ) {
-      return "COMPLETED";
+  const pickFirstNonEmpty = (...values) => {
+    for (const value of values) {
+      if (value === null || value === undefined) continue;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) continue;
+        return trimmed;
+      }
+      return value;
     }
-
-    if (status.includes("DISPATCHED") || status.includes("EN_ROUTE")) {
-      return "DISPATCHED";
-    }
-
-    return "FILLING";
+    return null;
   };
 
-  const status = getNormalizedStatus();
-
-  const quantityText =
-    typeof trip.quantity === "number"
-      ? trip.quantity.toLocaleString("en-IN") + " L"
-      : trip.quantity || "N/A";
-
-  const DetailRow = ({ label, value, isLast = false }) => {
-    if (
-      !value ||
-      value === "N/A" ||
-      value === "Not specified" ||
-      value === "Not assigned"
-    ) {
+  const formatQuantity = (value) => {
+    if (value === null || value === undefined) {
       return null;
     }
+    if (typeof value === "number") {
+      return `${value.toLocaleString("en-IN")} L`;
+    }
+    const trimmed = String(value).trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    if (/[A-Za-z]/.test(trimmed)) {
+      return trimmed;
+    }
+    const numeric = Number(trimmed);
+    if (!Number.isNaN(numeric)) {
+      return `${numeric.toLocaleString("en-IN")} L`;
+    }
+    return trimmed;
+  };
+
+  // Prefer explicit request fields, then fall back to generic quantity data.
+  const rawQuantity = pickFirstNonEmpty(
+    trip.quantity,
+    trip.requestQuantity,
+    trip.requestedQuantity,
+    trip.requestQty,
+    trip.requestedQty,
+    trip.quantityRequested,
+    trip.volume,
+    trip.totalQuantity,
+    trip.plannedQuantity,
+    trip.loadQuantity,
+    trip.capacity
+  );
+  const quantityText = formatQuantity(rawQuantity) ?? "Pending assignment";
+
+  const vehicleNumber = pickFirstNonEmpty(
+    trip.vehicleNumber,
+    trip.vehicleNo,
+    trip.vehicleRegNumber,
+    trip.vehicleRegistration,
+    trip.registrationNumber,
+    trip.truckNumber,
+    trip.tankerNumber,
+    trip.transportVehicleNumber,
+    trip.vehicle?.number,
+    trip.vehicle?.registrationNumber,
+    trip.vehicle?.regNo,
+    trip.vehicle?.vehicleNumber,
+    trip.assignedVehicleNumber,
+    trip.assignedVehicle?.regNo,
+    trip.assignedVehicle?.registrationNumber,
+    trip.assignedVehicle?.number
+  );
+
+  const vehicleDisplay = vehicleNumber ?? "Pending assignment";
+
+  const statusLabel = formatStatusLabel(trip.status);
+  const rawStatusCode = pickFirstNonEmpty(trip.status, trip.tripStatus);
+
+  const DetailRow = ({
+    label,
+    value,
+    isLast = false,
+    showWhenEmpty = false,
+  }) => {
+    const hasValue =
+      value !== null &&
+      value !== undefined &&
+      !(typeof value === "string" && value.trim().length === 0);
+
+    if (!hasValue && !showWhenEmpty) {
+      return null;
+    }
+
+    const displayText = hasValue ? value : "--";
+
     return (
       <View style={[styles.detailRow, isLast && styles.detailRowLast]}>
         <Text style={styles.detailLabel}>{label}</Text>
-        <Text style={styles.detailValue}>{value}</Text>
+        <Text style={styles.detailValue}>{displayText}</Text>
       </View>
     );
   };
@@ -311,14 +369,22 @@ export default function TripDetailsModal({ visible, trip, onClose }) {
               <View style={styles.detailsContainer}>
                 <DetailRow label="Trip ID" value={trip.id} />
                 <View style={styles.detailsContainer}>
-                  <DetailRow label="Status" value={status} />
+                  <DetailRow label="Status" value={statusLabel} showWhenEmpty />
                 </View>
                 <DetailRow
                   label="Product"
                   value={trip.product || trip.cargoType}
                 />
-                <DetailRow label="Quantity" value={quantityText} />
-                <DetailRow label="Vehicle Number" value={trip.vehicleNumber} />
+                <DetailRow
+                  label="Quantity"
+                  value={quantityText}
+                  showWhenEmpty
+                />
+                <DetailRow
+                  label="Vehicle Number"
+                  value={vehicleDisplay}
+                  showWhenEmpty
+                />
                 <DetailRow label="Driver Name" value={trip.driverName} />
                 <DetailRow label="Driver ID" value={trip.driverId} isLast />
               </View>

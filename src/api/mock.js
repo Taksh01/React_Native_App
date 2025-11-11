@@ -1186,7 +1186,10 @@ function determineCanonicalMsName(station, existingMap) {
       const fromRoute = extractMsNameFromRoute(item.route);
       if (fromRoute) return fromRoute;
       const fromOrigin = typeof item.origin === "string" ? item.origin : null;
-      if (fromOrigin && PRODUCT_LOCATION_KEYWORDS.some((key) => fromOrigin.includes(key))) {
+      if (
+        fromOrigin &&
+        PRODUCT_LOCATION_KEYWORDS.some((key) => fromOrigin.includes(key))
+      ) {
         return fromOrigin;
       }
     }
@@ -1306,6 +1309,34 @@ function pickByKeyword(values = [], keyword = "") {
   );
 }
 
+const getFirstTruthy = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length === 0) continue;
+      return trimmed;
+    }
+    return value;
+  }
+  return null;
+};
+
+function coerceQuantity(value, fallback) {
+  const candidate = getFirstTruthy(value, fallback);
+  if (candidate === null) {
+    return null;
+  }
+  if (typeof candidate === "number") {
+    return candidate;
+  }
+  const numeric = Number(candidate);
+  if (!Number.isNaN(numeric) && numeric > 0) {
+    return numeric;
+  }
+  return candidate;
+}
+
 function normalizeScheduleTrip(trip = {}, defaults = {}) {
   const safeTrip = { ...trip };
   const { origin, destination } = parseRouteStations(safeTrip.route || "");
@@ -1322,6 +1353,73 @@ function normalizeScheduleTrip(trip = {}, defaults = {}) {
     safeTrip.time ||
     safeTrip.createdAt ||
     new Date().toISOString();
+  const quantity = coerceQuantity(
+    getFirstTruthy(
+      safeTrip.quantity,
+      safeTrip.requestQuantity,
+      safeTrip.requestedQuantity,
+      safeTrip.requestQty,
+      safeTrip.quantityRequested,
+      safeTrip.volume,
+      safeTrip.totalQuantity,
+      safeTrip.plannedQuantity,
+      safeTrip.loadQuantity,
+      safeTrip.capacity,
+      defaults.quantity
+    )
+  );
+
+  const vehicleNumber = getFirstTruthy(
+    safeTrip.vehicleNumber,
+    safeTrip.vehicleNo,
+    safeTrip.vehicleRegNumber,
+    safeTrip.vehicleRegistration,
+    safeTrip.registrationNumber,
+    safeTrip.truckNumber,
+    safeTrip.tankerNumber,
+    safeTrip.transportVehicleNumber,
+    safeTrip.vehicle?.number,
+    safeTrip.vehicle?.registrationNumber,
+    safeTrip.vehicle?.regNo,
+    safeTrip.vehicle?.vehicleNumber,
+    safeTrip.vehicle?.code,
+    defaults.vehicleNumber
+  );
+
+  const defaultQuantityValue = (() => {
+    if (typeof quantity === "number" && quantity > 0) {
+      return quantity;
+    }
+    const numeric = Number(quantity);
+    if (!Number.isNaN(numeric) && numeric > 0) {
+      return numeric;
+    }
+    if (typeof defaults.quantity === "number" && defaults.quantity > 0) {
+      return defaults.quantity;
+    }
+    if (safeTrip.product && /diesel/i.test(safeTrip.product)) {
+      return 12000;
+    }
+    if (safeTrip.product && /petrol|gasoline/i.test(safeTrip.product)) {
+      return 8000;
+    }
+    return 10000;
+  })();
+
+  const normalizedQuantity = defaultQuantityValue;
+
+  const normalizedVehicleNumber = (() => {
+    if (vehicleNumber) {
+      return vehicleNumber;
+    }
+    const baseId = String(safeTrip.id || defaults.tripId || "TRP");
+    const suffix = baseId
+      .replace(/[^A-Z0-9]/gi, "")
+      .slice(-4)
+      .padStart(4, "0");
+    return `TBA-${suffix.toUpperCase()}`;
+  })();
+
   return {
     ...safeTrip,
     scheduledTime,
@@ -1337,6 +1435,8 @@ function normalizeScheduleTrip(trip = {}, defaults = {}) {
       defaults.dbsName ||
       defaults.dbsId ||
       null,
+    quantity: normalizedQuantity,
+    vehicleNumber: normalizedVehicleNumber,
   };
 }
 
@@ -2389,8 +2489,7 @@ export async function getMsCluster(msId) {
       }
       if (msRecord?.msName && station.primaryMsName) {
         return (
-          station.primaryMsName.toLowerCase() ===
-          msRecord.msName.toLowerCase()
+          station.primaryMsName.toLowerCase() === msRecord.msName.toLowerCase()
         );
       }
       return false;

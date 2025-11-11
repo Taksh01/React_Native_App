@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -568,7 +574,10 @@ export default function DriverApprovals() {
     if (isLoading && pendingDrivers.length === 0) {
       return (
         <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color={themeRef.current?.colors?.loaderPrimary || "#1d4ed8"} />
+          <ActivityIndicator
+            size="large"
+            color={themeRef.current?.colors?.loaderPrimary || "#1d4ed8"}
+          />
           <Text style={styles.loaderText}>Loading pending drivers…</Text>
         </View>
       );
@@ -739,7 +748,9 @@ export default function DriverApprovals() {
               disabled={approveMutation.isPending}
             >
               {approveMutation.isPending ? (
-                <ActivityIndicator color={themeRef.current?.colors?.surfaceElevated || "#ffffff"} />
+                <ActivityIndicator
+                  color={themeRef.current?.colors?.surfaceElevated || "#ffffff"}
+                />
               ) : (
                 <Text style={styles.confirmButtonText}>Approve</Text>
               )}
@@ -798,7 +809,9 @@ export default function DriverApprovals() {
               disabled={rejectMutation.isPending}
             >
               {rejectMutation.isPending ? (
-                <ActivityIndicator color={themeRef.current?.colors?.surfaceElevated || "#ffffff"} />
+                <ActivityIndicator
+                  color={themeRef.current?.colors?.surfaceElevated || "#ffffff"}
+                />
               ) : (
                 <Text style={styles.confirmButtonText}>Reject</Text>
               )}
@@ -812,10 +825,10 @@ export default function DriverApprovals() {
   return (
     <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       <View style={styles.header}>
-        <Text style={styles.screenTitle}>Driver Approvals</Text>
+        {/* <Text style={styles.screenTitle}>Driver Approvals</Text>
         <Text style={styles.screenSubtitle}>
           Validate license documents, confirm training, and activate drivers.
-        </Text>
+        </Text> */}
       </View>
 
       {renderPermissionBanner()}

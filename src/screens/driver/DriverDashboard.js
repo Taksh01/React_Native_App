@@ -928,7 +928,7 @@ export default function DriverDashboard({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView edges={["left", "right", "bottom"]} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {renderTripHeader()}
         {renderMainContent()}

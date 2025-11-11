@@ -521,12 +521,12 @@ export default function Decanting() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
+          {/* <View style={styles.header}>
             <Text style={styles.title}>DBS Decanting</Text>
             <Text style={styles.subtitle}>
               Manage truck arrivals and decanting operations
             </Text>
-          </View>
+          </View> */}
 
           {/* Token Status */}
           <View style={styles.tokenStatus}>

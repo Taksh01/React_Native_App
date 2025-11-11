@@ -114,6 +114,7 @@ export default function MSDashboard() {
       safe: {
         flex: 1,
         backgroundColor: theme.colors.background,
+        paddingTop: theme.spacing(4),
       },
       listContent: {
         paddingHorizontal: theme.spacing(4),
@@ -355,7 +356,7 @@ export default function MSDashboard() {
 
   if (isLoading && !data) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView edges={["left", "right", "bottom"]} style={styles.safe}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563eb" />
         </View>
@@ -364,7 +365,7 @@ export default function MSDashboard() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={["left", "right", "bottom"]} style={styles.safe}>
       <SectionList
         sections={sections}
         keyExtractor={(item, index) => item.id || `${index}-${item.dbsId}`}

@@ -14,29 +14,13 @@ import { useAuth } from "../../store/auth";
 import { GTS } from "../../api/client";
 import AppIcon from "../../components/AppIcon";
 import TripDetailsModal from "../../components/TripDetailsModal";
+import { deriveStatusCategory, formatStatusLabel } from "../../lib/tripStatus";
 import { useThemedStyles } from "../../theme";
 
 const STATUS_COLORS = {
-  PENDING: "#f59e0b",
-  FILLING: "#0ea5e9",
+  DISPATCHED: "#2563eb",
+  FILLING: "#38bdf8",
   COMPLETED: "#10b981",
-};
-
-const STATUS_GROUPS = {
-  PENDING: ["PENDING", "SCHEDULED", "ON_HOLD", "DELAYED", ""],
-  FILLING: ["IN_PROGRESS", "LOADING", "DISPATCHED", "ARRIVED"],
-  COMPLETED: ["COMPLETED", "DELIVERED", "CONFIRMED"],
-};
-
-const deriveStatusCategory = (status) => {
-  const normalized = String(status || "").toUpperCase();
-  if (STATUS_GROUPS.COMPLETED.some((value) => normalized.includes(value))) {
-    return "COMPLETED";
-  }
-  if (STATUS_GROUPS.FILLING.some((value) => normalized.includes(value))) {
-    return "FILLING";
-  }
-  return "PENDING";
 };
 
 const formatDateHeading = (value) => {
@@ -82,13 +66,6 @@ const buildSections = (trips = []) => {
 
 const getStatusColor = (status) => STATUS_COLORS[deriveStatusCategory(status)];
 
-const formatStatusLabel = (status) => {
-  const category = deriveStatusCategory(status);
-  if (category === "FILLING") return "Filling";
-  if (category === "COMPLETED") return "Completed";
-  return "Pending";
-};
-
 export default function DBSDashboard() {
   const { user } = useAuth();
   const dbsId = user?.dbsId || "DBS-09";
@@ -110,6 +87,7 @@ export default function DBSDashboard() {
       safe: {
         flex: 1,
         backgroundColor: theme.colors.background,
+        paddingTop: theme.spacing(4),
       },
       listContent: {
         paddingHorizontal: theme.spacing(4),
@@ -262,7 +240,7 @@ export default function DBSDashboard() {
       )}
       <View style={styles.summaryRow}>
         <View style={styles.summaryChip}>
-          <Text style={styles.summaryLabel}>Pending</Text>
+          <Text style={styles.summaryLabel}>Dispatched</Text>
           <Text style={styles.summaryValue}>{summary.pending}</Text>
         </View>
         <View style={styles.summaryChip}>
@@ -314,7 +292,7 @@ export default function DBSDashboard() {
 
   if (isLoading && !data) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView edges={["left", "right", "bottom"]} style={styles.safe}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563eb" />
         </View>
@@ -323,7 +301,7 @@ export default function DBSDashboard() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={["left", "right", "bottom"]} style={styles.safe}>
       <SectionList
         sections={sections}
         keyExtractor={(item, index) =>
