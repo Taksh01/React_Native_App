@@ -11,9 +11,11 @@ import CustomerNavigator from "./CustomerNavigator";
 // Screens (make sure these paths exist in your project)
 import MSOperations from "../screens/ms/MSOperations";
 import MSDashboard from "../screens/ms/Dashboard";
+import MsStockTransfers from "../screens/ms/StockTransfers";
 import Decanting from "../screens/dbs/Decanting";
 import ManualRequest from "../screens/dbs/ManualRequest";
 import DBSDashboard from "../screens/dbs/Dashboard";
+import DbsStockTransfers from "../screens/dbs/StockTransfers";
 import DriverDashboard from "../screens/driver/DriverDashboard";
 import EmergencyAlert from "../screens/driver/EmergencyAlert";
 import SettingsScreen from "../screens/Settings";
@@ -84,8 +86,7 @@ export default function RoleTabs({ navigation }) {
     return null;
   }
 
-  // DBS Operator: Manual Request + Decanting
-  // Tab Navigator with 3 tabs
+  // DBS Operator: Dashboard + Requests + Transfers + Decanting
   if (role === "DBS_OPERATOR") {
     return (
       <Tab.Navigator
@@ -125,6 +126,16 @@ export default function RoleTabs({ navigation }) {
           }}
         />
         <Tab.Screen
+          name="DbsStockTransfers"
+          component={DbsStockTransfers}
+          options={{
+            title: "Transfers",
+            tabBarIcon: ({ color }) => (
+              <AppIcon icon="transfers" size={20} color={color} />
+            ),
+          }}
+        />
+        <Tab.Screen
           name="Decanting"
           component={Decanting}
           options={{
@@ -147,7 +158,6 @@ export default function RoleTabs({ navigation }) {
   }
 
   // MS Operator
-  // Tab Navigator with 2 tabs
   if (role === "MS_OPERATOR") {
     return (
       <Tab.Navigator
@@ -183,6 +193,16 @@ export default function RoleTabs({ navigation }) {
           options={{
             tabBarIcon: ({ color }) => (
               <AppIcon icon="factory" size={20} color={color} />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="MsStockTransfers"
+          component={MsStockTransfers}
+          options={{
+            title: "Transfers",
+            tabBarIcon: ({ color }) => (
+              <AppIcon icon="transfers" size={20} color={color} />
             ),
           }}
         />
@@ -256,7 +276,8 @@ export default function RoleTabs({ navigation }) {
   }
 
   // FDODO Customer
-  // Use FDODO Navigator with bottom tabs
+  // Use FDODO Navigator with drawer navigation
+  // ! Drawer Navigator
   if (role === "FDODO_CUSTOMER") {
     return <FdodoNavigator />;
   }

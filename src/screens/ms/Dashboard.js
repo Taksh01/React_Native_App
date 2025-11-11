@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -6,12 +6,14 @@ import {
   StyleSheet,
   Text,
   View,
+  TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../store/auth";
 import { GTS } from "../../api/client";
 import AppIcon from "../../components/AppIcon";
+import TripDetailsModal from "../../components/TripDetailsModal";
 import { useThemedStyles } from "../../theme";
 
 const STATUS_COLORS = {
@@ -76,14 +78,16 @@ const groupTrips = (trips = []) => {
     return acc;
   }, new Map());
 
-  return Array.from(map.entries()).map(([title, data]) => ({
-    title,
-    data: data.sort(
-      (a, b) =>
-        new Date(a.scheduledTime || 0).getTime() -
-        new Date(b.scheduledTime || 0).getTime()
-    ),
-  }));
+  return Array.from(map.entries())
+    .map(([title, data]) => ({
+      title,
+      data: data.sort(
+        (a, b) =>
+          new Date(a.scheduledTime || 0).getTime() -
+          new Date(b.scheduledTime || 0).getTime()
+      ),
+    }))
+    .reverse();
 };
 
 const resolveStatusColor = (status) =>
@@ -92,6 +96,18 @@ const resolveStatusColor = (status) =>
 export default function MSDashboard() {
   const { user } = useAuth();
   const msId = user?.msId || "MS-12";
+  const [selectedTrip, setSelectedTrip] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const handleTripPress = useCallback((trip) => {
+    setSelectedTrip(trip);
+    setModalVisible(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setModalVisible(false);
+    setSelectedTrip(null);
+  }, []);
 
   const styles = useThemedStyles((theme) =>
     StyleSheet.create({
@@ -288,7 +304,11 @@ export default function MSDashboard() {
         ? item.quantity.toLocaleString("en-IN")
         : item.quantity || "--";
     return (
-      <View style={styles.tripCard}>
+      <TouchableOpacity
+        style={styles.tripCard}
+        onPress={() => handleTripPress(item)}
+        activeOpacity={0.7}
+      >
         <View style={styles.tripHeader}>
           <Text style={styles.tripId}>{item.id}</Text>
           <View
@@ -329,7 +349,7 @@ export default function MSDashboard() {
             <Text style={styles.metaText}>{item.vehicleNumber}</Text>
           </View>
         </View> */}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -366,6 +386,11 @@ export default function MSDashboard() {
           <RefreshControl refreshing={isFetching} onRefresh={handleRefresh} />
         }
         stickySectionHeadersEnabled={false}
+      />
+      <TripDetailsModal
+        visible={modalVisible}
+        trip={selectedTrip}
+        onClose={handleCloseModal}
       />
     </SafeAreaView>
   );

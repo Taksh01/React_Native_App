@@ -20,6 +20,7 @@ import ReconciliationReports from "../screens/eic/ReconciliationReports";
 import DriverApprovals from "../screens/eic/DriverApprovals";
 import ClusterManagement from "../screens/eic/ClusterManagement";
 import NetworkDashboard from "../screens/eic/NetworkDashboard";
+import EicStockTransfers from "../screens/eic/StockTransfers";
 import SettingsScreen from "../screens/Settings";
 
 let createDrawerNavigator, DrawerContentScrollView, DrawerItemList;
@@ -174,6 +175,16 @@ const DrawerNavigator = memo(function DrawerNavigator() {
         }}
       />
       <Drawer.Screen
+        name="EicStockTransfers"
+        component={EicStockTransfers}
+        options={{
+          title: "Stock Transfers",
+          drawerIcon: ({ color }) => (
+            <AppIcon icon="transfers" size={18} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
         name="VehicleTracking"
         component={VehicleTracking}
         options={{
@@ -273,6 +284,11 @@ function StackNavigator() {
         name="StockRequests"
         component={IncomingStockRequests}
         options={{ title: "Stock Requests" }}
+      />
+      <Stack.Screen
+        name="EicStockTransfers"
+        component={EicStockTransfers}
+        options={{ title: "Stock Transfers" }}
       />
       <Stack.Screen
         name="VehicleTracking"

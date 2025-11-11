@@ -68,6 +68,8 @@ const _mock = {
       password: "password",
       role: "EIC",
       name: "EIC Admin",
+      msId: "MS-12",
+      msName: "Vastral MS",
     },
     {
       id: "3",
@@ -1506,6 +1508,8 @@ export async function mockLogin(usernameOrCredentials, passwordArg, roleArg) {
       name: user.name,
       dbsId: user.dbsId,
       dbsName: user.dbsName,
+      msId: user.msId,
+      msName: user.msName,
       permissions: mockGetUserPermissions(user.id, finalRole),
     },
   };
@@ -2368,6 +2372,50 @@ export async function getMsTripSchedule(msId) {
     },
     trips,
     summary: computeStatusSummary(trips),
+  };
+}
+
+export async function getMsCluster(msId) {
+  await sleep(180);
+  const customerStations = Object.values(_mock.customerStations || {});
+  const msStations = _mock.msStations || {};
+  const msRecord = (msId && msStations[msId]) || null;
+
+  const linkedStations = customerStations
+    .filter((station) => {
+      if (!station) return false;
+      if (msId && station.primaryMsId) {
+        return station.primaryMsId === msId;
+      }
+      if (msRecord?.msName && station.primaryMsName) {
+        return (
+          station.primaryMsName.toLowerCase() ===
+          msRecord.msName.toLowerCase()
+        );
+      }
+      return false;
+    })
+    .map((station) => ({
+      dbsId: station.dbsId,
+      dbsName: station.dbsName,
+      location: station.location,
+      region: station.region,
+      primaryMsId: station.primaryMsId,
+      primaryMsName: station.primaryMsName,
+    }))
+    .sort((a, b) => (a.dbsName || "").localeCompare(b.dbsName || ""));
+
+  return {
+    ms: {
+      msId: msRecord?.msId || msId || linkedStations[0]?.primaryMsId || null,
+      msName:
+        msRecord?.msName ||
+        linkedStations[0]?.primaryMsName ||
+        msId ||
+        "MS Station",
+      location: msRecord?.location || null,
+    },
+    dbs: linkedStations,
   };
 }
 

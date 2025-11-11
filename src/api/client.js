@@ -395,6 +395,12 @@ export const GTS = {
     return data;
   },
 
+  async getMsCluster(msId) {
+    if (CONFIG.MOCK_MODE) return mock.getMsCluster(msId);
+    const { data } = await api.get(`/ms/${msId}/cluster`);
+    return data;
+  },
+
   async getNetworkOverview() {
     if (CONFIG.MOCK_MODE) return mock.getNetworkOverview();
     const { data } = await api.get(`/network/overview`);

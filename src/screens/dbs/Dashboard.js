@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -6,12 +6,14 @@ import {
   StyleSheet,
   Text,
   View,
+  TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../store/auth";
 import { GTS } from "../../api/client";
 import AppIcon from "../../components/AppIcon";
+import TripDetailsModal from "../../components/TripDetailsModal";
 import { useThemedStyles } from "../../theme";
 
 const STATUS_COLORS = {
@@ -66,14 +68,16 @@ const buildSections = (trips = []) => {
     return acc;
   }, new Map());
 
-  return Array.from(buckets.entries()).map(([title, data]) => ({
-    title,
-    data: data.sort(
-      (a, b) =>
-        new Date(a.scheduledTime || 0).getTime() -
-        new Date(b.scheduledTime || 0).getTime()
-    ),
-  }));
+  return Array.from(buckets.entries())
+    .map(([title, data]) => ({
+      title,
+      data: data.sort(
+        (a, b) =>
+          new Date(a.scheduledTime || 0).getTime() -
+          new Date(b.scheduledTime || 0).getTime()
+      ),
+    }))
+    .reverse();
 };
 
 const getStatusColor = (status) => STATUS_COLORS[deriveStatusCategory(status)];
@@ -88,6 +92,18 @@ const formatStatusLabel = (status) => {
 export default function DBSDashboard() {
   const { user } = useAuth();
   const dbsId = user?.dbsId || "DBS-09";
+  const [selectedTrip, setSelectedTrip] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const handleTripPress = useCallback((trip) => {
+    setSelectedTrip(trip);
+    setModalVisible(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setModalVisible(false);
+    setSelectedTrip(null);
+  }, []);
 
   const styles = useThemedStyles((theme) =>
     StyleSheet.create({
@@ -262,7 +278,11 @@ export default function DBSDashboard() {
   );
 
   const renderItem = ({ item }) => (
-    <View style={styles.tripCard}>
+    <TouchableOpacity
+      style={styles.tripCard}
+      onPress={() => handleTripPress(item)}
+      activeOpacity={0.7}
+    >
       <View style={styles.tripHeader}>
         <Text style={styles.tripId}>{item.id}</Text>
         <View
@@ -289,7 +309,7 @@ export default function DBSDashboard() {
           <Text style={styles.metaText}>{formatTime(item.scheduledTime)}</Text>
         </View>
       </View> */}
-    </View>
+    </TouchableOpacity>
   );
 
   if (isLoading && !data) {
@@ -327,6 +347,11 @@ export default function DBSDashboard() {
           <RefreshControl refreshing={isFetching} onRefresh={handleRefresh} />
         }
         stickySectionHeadersEnabled={false}
+      />
+      <TripDetailsModal
+        visible={modalVisible}
+        trip={selectedTrip}
+        onClose={handleCloseModal}
       />
     </SafeAreaView>
   );
