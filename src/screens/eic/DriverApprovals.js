@@ -16,6 +16,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -254,11 +256,22 @@ export default function DriverApprovals() {
         justifyContent: "center",
         padding: theme.spacing(5),
       },
+      kav: {
+        flex: 1,
+        justifyContent: "center",
+      },
       modalContent: {
         backgroundColor: theme.colors.surfaceElevated,
         borderRadius: theme.radii.lg,
         maxHeight: "92%",
         width: "100%",
+        overflow: "hidden",
+      },
+      modalCard: {
+        backgroundColor: theme.colors.surfaceElevated,
+        borderRadius: theme.radii.lg,
+        width: "100%",
+        maxHeight: "90%",
         overflow: "hidden",
       },
       modalInner: {
@@ -628,135 +641,158 @@ export default function DriverApprovals() {
       onRequestClose={() => setShowApproveModal(false)}
     >
       <View style={styles.modalOverlay}>
-        <ScrollView
-          style={styles.modalContent}
-          contentContainerStyle={styles.modalInner}
+        <KeyboardAvoidingView
+          style={styles.kav}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
-          <Text style={styles.modalTitle}>Approve driver</Text>
-          <Text style={styles.modalSubtitle}>
-            Validate license, assign shift, confirm training before activating
-            the driver.
-          </Text>
-
-          <View style={styles.formGroupRow}>
-            <View style={styles.formColumn}>
-              <Text style={styles.inputLabel}>Shift start</Text>
-              <TextInput
-                style={styles.input}
-                value={approvalForm.shiftStart}
-                placeholder="08:00"
-                onChangeText={(value) =>
-                  setApprovalForm((prev) => ({ ...prev, shiftStart: value }))
-                }
-              />
-            </View>
-            <View style={styles.formColumn}>
-              <Text style={styles.inputLabel}>Shift end</Text>
-              <TextInput
-                style={styles.input}
-                value={approvalForm.shiftEnd}
-                placeholder="16:00"
-                onChangeText={(value) =>
-                  setApprovalForm((prev) => ({ ...prev, shiftEnd: value }))
-                }
-              />
-            </View>
-          </View>
-
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>License verified</Text>
-            <AppSwitch
-              value={approvalForm.licenseVerified}
-              onValueChange={(value) =>
-                setApprovalForm((prev) => ({ ...prev, licenseVerified: value }))
-              }
-            />
-          </View>
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Training verified</Text>
-            <AppSwitch
-              value={approvalForm.trainingVerified}
-              onValueChange={(value) =>
-                setApprovalForm((prev) => ({
-                  ...prev,
-                  trainingVerified: value,
-                }))
-              }
-            />
-          </View>
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Training completed</Text>
-            <AppSwitch
-              value={approvalForm.trainingCompleted}
-              onValueChange={(value) =>
-                setApprovalForm((prev) => ({
-                  ...prev,
-                  trainingCompleted: value,
-                }))
-              }
-            />
-          </View>
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Shift assigned</Text>
-            <AppSwitch
-              value={approvalForm.shiftAssigned}
-              onValueChange={(value) =>
-                setApprovalForm((prev) => ({ ...prev, shiftAssigned: value }))
-              }
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.inputLabel}>
-              Training modules (comma separated)
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={approvalForm.trainingModules}
-              onChangeText={(value) =>
-                setApprovalForm((prev) => ({ ...prev, trainingModules: value }))
-              }
-              placeholder="Hazmat Handling, Emergency Response"
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.inputLabel}>Notes</Text>
-            <TextInput
-              style={[styles.input, styles.notesInput]}
-              value={approvalForm.notes}
-              onChangeText={(value) =>
-                setApprovalForm((prev) => ({ ...prev, notes: value }))
-              }
-              multiline
-              numberOfLines={4}
-              placeholder="Add any remarks for dispatch or compliance teams"
-            />
-          </View>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowApproveModal(false)}
-              disabled={approveMutation.isPending}
+          <View style={styles.modalCard}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              contentContainerStyle={[styles.modalInner, { paddingBottom: 32 }]}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={handleApprovalSubmit}
-              disabled={approveMutation.isPending}
-            >
-              {approveMutation.isPending ? (
-                <ActivityIndicator
-                  color={themeRef.current?.colors?.surfaceElevated || "#ffffff"}
+              <Text style={styles.modalTitle}>Approve driver</Text>
+              <Text style={styles.modalSubtitle}>
+                Validate license, assign shift, confirm training before
+                activating the driver.
+              </Text>
+
+              <View style={styles.formGroupRow}>
+                <View style={styles.formColumn}>
+                  <Text style={styles.inputLabel}>Shift start</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={approvalForm.shiftStart}
+                    placeholder="08:00"
+                    onChangeText={(value) =>
+                      setApprovalForm((prev) => ({
+                        ...prev,
+                        shiftStart: value,
+                      }))
+                    }
+                  />
+                </View>
+                <View style={styles.formColumn}>
+                  <Text style={styles.inputLabel}>Shift end</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={approvalForm.shiftEnd}
+                    placeholder="16:00"
+                    onChangeText={(value) =>
+                      setApprovalForm((prev) => ({ ...prev, shiftEnd: value }))
+                    }
+                  />
+                </View>
+              </View>
+
+              <View style={styles.toggleRow}>
+                <Text style={styles.toggleLabel}>License verified</Text>
+                <AppSwitch
+                  value={approvalForm.licenseVerified}
+                  onValueChange={(value) =>
+                    setApprovalForm((prev) => ({
+                      ...prev,
+                      licenseVerified: value,
+                    }))
+                  }
                 />
-              ) : (
-                <Text style={styles.confirmButtonText}>Approve</Text>
-              )}
-            </TouchableOpacity>
+              </View>
+              <View style={styles.toggleRow}>
+                <Text style={styles.toggleLabel}>Training verified</Text>
+                <AppSwitch
+                  value={approvalForm.trainingVerified}
+                  onValueChange={(value) =>
+                    setApprovalForm((prev) => ({
+                      ...prev,
+                      trainingVerified: value,
+                    }))
+                  }
+                />
+              </View>
+              <View style={styles.toggleRow}>
+                <Text style={styles.toggleLabel}>Training completed</Text>
+                <AppSwitch
+                  value={approvalForm.trainingCompleted}
+                  onValueChange={(value) =>
+                    setApprovalForm((prev) => ({
+                      ...prev,
+                      trainingCompleted: value,
+                    }))
+                  }
+                />
+              </View>
+              <View style={styles.toggleRow}>
+                <Text style={styles.toggleLabel}>Shift assigned</Text>
+                <AppSwitch
+                  value={approvalForm.shiftAssigned}
+                  onValueChange={(value) =>
+                    setApprovalForm((prev) => ({
+                      ...prev,
+                      shiftAssigned: value,
+                    }))
+                  }
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.inputLabel}>
+                  Training modules (comma separated)
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={approvalForm.trainingModules}
+                  onChangeText={(value) =>
+                    setApprovalForm((prev) => ({
+                      ...prev,
+                      trainingModules: value,
+                    }))
+                  }
+                  placeholder="Hazmat Handling, Emergency Response"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.inputLabel}>Notes</Text>
+                <TextInput
+                  style={[styles.input, styles.notesInput]}
+                  value={approvalForm.notes}
+                  onChangeText={(value) =>
+                    setApprovalForm((prev) => ({ ...prev, notes: value }))
+                  }
+                  multiline
+                  numberOfLines={4}
+                  placeholder="Add any remarks for dispatch or compliance teams"
+                />
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setShowApproveModal(false)}
+                  disabled={approveMutation.isPending}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.confirmButton}
+                  onPress={handleApprovalSubmit}
+                  disabled={approveMutation.isPending}
+                >
+                  {approveMutation.isPending ? (
+                    <ActivityIndicator
+                      color={
+                        themeRef.current?.colors?.surfaceElevated || "#ffffff"
+                      }
+                    />
+                  ) : (
+                    <Text style={styles.confirmButtonText}>Approve</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
-        </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -769,55 +805,70 @@ export default function DriverApprovals() {
       onRequestClose={() => setShowRejectModal(false)}
     >
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, styles.modalCompact]}>
-          <Text style={styles.modalTitle}>Reject driver</Text>
-          <Text style={[styles.modalSubtitle, styles.modalSubtitleTight]}>
-            Provide a reason so the applicant knows what to fix before
-            reapplying.
-          </Text>
-          <View style={styles.formGroup}>
-            <Text style={styles.inputLabel}>Reason</Text>
-            <TextInput
-              style={styles.input}
-              value={rejectionReason}
-              onChangeText={setRejectionReason}
-              placeholder="License expired / incomplete documents..."
-            />
-          </View>
-          <View style={styles.formGroup}>
-            <Text style={styles.inputLabel}>Notes (optional)</Text>
-            <TextInput
-              style={[styles.input, styles.notesInput]}
-              value={rejectionNotes}
-              onChangeText={setRejectionNotes}
-              multiline
-              numberOfLines={3}
-              placeholder="Extra guidance for the driver"
-            />
-          </View>
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowRejectModal(false)}
-              disabled={rejectMutation.isPending}
+        <KeyboardAvoidingView
+          style={styles.kav}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+        >
+          <View style={styles.modalContent}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              contentContainerStyle={styles.modalCompact}
+              showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.confirmButton, styles.rejectConfirmButton]}
-              onPress={handleRejectSubmit}
-              disabled={rejectMutation.isPending}
-            >
-              {rejectMutation.isPending ? (
-                <ActivityIndicator
-                  color={themeRef.current?.colors?.surfaceElevated || "#ffffff"}
+              <Text style={styles.modalTitle}>Reject driver</Text>
+              <Text style={[styles.modalSubtitle, styles.modalSubtitleTight]}>
+                Provide a reason so the applicant knows what to fix before
+                reapplying.
+              </Text>
+              <View style={styles.formGroup}>
+                <Text style={styles.inputLabel}>Reason</Text>
+                <TextInput
+                  style={styles.input}
+                  value={rejectionReason}
+                  onChangeText={setRejectionReason}
+                  placeholder="License expired / incomplete documents..."
                 />
-              ) : (
-                <Text style={styles.confirmButtonText}>Reject</Text>
-              )}
-            </TouchableOpacity>
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.inputLabel}>Notes (optional)</Text>
+                <TextInput
+                  style={[styles.input, styles.notesInput]}
+                  value={rejectionNotes}
+                  onChangeText={setRejectionNotes}
+                  multiline
+                  numberOfLines={3}
+                  placeholder="Extra guidance for the driver"
+                />
+              </View>
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setShowRejectModal(false)}
+                  disabled={rejectMutation.isPending}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmButton, styles.rejectConfirmButton]}
+                  onPress={handleRejectSubmit}
+                  disabled={rejectMutation.isPending}
+                >
+                  {rejectMutation.isPending ? (
+                    <ActivityIndicator
+                      color={
+                        themeRef.current?.colors?.surfaceElevated || "#ffffff"
+                      }
+                    />
+                  ) : (
+                    <Text style={styles.confirmButtonText}>Reject</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

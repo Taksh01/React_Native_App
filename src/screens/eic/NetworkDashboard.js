@@ -56,24 +56,63 @@ const nextTrips = (trips = [], limit = 3) =>
     )
     .slice(0, limit);
 
+const EXCLUDED_DBS_BY_MS = {
+  "MS-14": new Set(["DBS-09", "DBS-15"]),
+  "Sanand MS": new Set(["DBS-09", "DBS-15"]),
+  "MS-18": new Set(["DBS-09"]),
+  "Naroda MS": new Set(["DBS-09"]),
+};
+
+const shouldExcludeTrip = (ms, trip) => {
+  if (!trip) return true;
+  const blacklist =
+    EXCLUDED_DBS_BY_MS[ms?.msId] || EXCLUDED_DBS_BY_MS[ms?.msName];
+  if (!blacklist) {
+    return false;
+  }
+  return blacklist.has(trip.dbsId);
+};
+
 const groupByDbs = (ms, dbsLookup) => {
   const grouped = new Map();
-  (ms.trips || []).forEach((trip, idx) => {
-    const key = trip.dbsId || `${ms.msId}-DBS-${idx}`;
-    if (!grouped.has(key)) {
-      grouped.set(key, {
-        dbsId: trip.dbsId,
-        dbsName: trip.dbsName || `DBS ${idx + 1}`,
-        trips: [],
-      });
-    }
-    grouped.get(key).trips.push(trip);
-  });
+  (ms.trips || [])
+    .filter((trip) => !shouldExcludeTrip(ms, trip))
+    .forEach((trip, idx) => {
+      const key = trip.dbsId || `${ms.msId}-DBS-${idx}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          dbsId: trip.dbsId,
+          dbsName: trip.dbsName || `DBS ${idx + 1}`,
+          trips: [],
+        });
+      }
+      grouped.get(key).trips.push(trip);
+    });
 
   return Array.from(grouped.values()).map((record, idx) => {
     const reference = record.dbsId ? dbsLookup.get(record.dbsId) : null;
-    const sourceTrips =
-      reference?.trips?.length > 0 ? reference.trips : record.trips;
+    let sourceTrips = record.trips;
+
+    if (reference?.trips?.length) {
+      const alignedTrips = reference.trips.filter((trip) => {
+        if (!trip) return false;
+        if (trip.msId && ms?.msId) {
+          return trip.msId === ms.msId;
+        }
+        if (trip.msName && ms?.msName) {
+          return trip.msName.toLowerCase() === ms.msName.toLowerCase();
+        }
+        return true;
+      });
+
+      if (alignedTrips.length) {
+        sourceTrips = alignedTrips;
+      }
+    }
+
+    if (!Array.isArray(sourceTrips) || sourceTrips.length === 0) {
+      sourceTrips = record.trips;
+    }
     return {
       key: record.dbsId || `${ms.msId}-db-${idx}`,
       dbsId: record.dbsId,
@@ -273,7 +312,9 @@ export default function NetworkDashboard() {
         paddingVertical: theme.spacing(1),
         borderRadius: 4,
       },
-      modalList: {},
+      modalList: {
+        padding: theme.spacing(2),
+      },
       modalFooter: {
         marginTop: theme.spacing(2),
         paddingTop: theme.spacing(2),
@@ -572,6 +613,7 @@ export default function NetworkDashboard() {
               keyExtractor={(item, index) =>
                 item.id || `${index}-${item.msName || "trip"}`
               }
+              ListFooterComponent={() => <View style={{ height: 24 }} />}
               renderSectionHeader={({ section }) => (
                 <Text style={styles.newSectionHeader}>{section.title}</Text>
               )}
