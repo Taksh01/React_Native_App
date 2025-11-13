@@ -245,11 +245,9 @@ export default function EmergencyAlert({ navigation, route }) {
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      Alert.alert(
-        "Emergency Reported (Offline)",
-        `${emergency.title} has been saved locally. Control center will be notified once connectivity is restored.`,
-        [{ text: "OK", onPress: () => navigation.goBack() }]
-      );
+      Alert.alert("Emergency Reported", `Control center will be notified.`, [
+        { text: "OK", onPress: () => navigation.goBack() },
+      ]);
     } finally {
       setLoading(false);
       setSelectedEmergency(null);

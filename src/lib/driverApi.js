@@ -204,4 +204,16 @@ export const driverApi = {
     }
     return data;
   },
+  // Fetch trip history for a driver (past trips)
+  getTripHistory: async ({ driverId, page = 1, limit = 50 } = {}) => {
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/driver/${driverId}/trips?page=${page}&limit=${limit}`
+    );
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to fetch trip history");
+    }
+    return data;
+  },
 };

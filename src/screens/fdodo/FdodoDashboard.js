@@ -426,7 +426,7 @@ export default function FdodoDashboard() {
             <View style={styles.metricCardInner}>
               <Text style={styles.metricLabel}>Credit Available</Text>
               <Text style={styles.metricValue}>
-                {credit.available?.toLocaleString?.() ?? "0"} L
+                {credit.available?.toLocaleString?.() ?? "0"}
               </Text>
               {/* <Text style={styles.metricNote}>
                 Reserved: {credit.reserved?.toLocaleString?.() ?? "0"} L
@@ -495,17 +495,17 @@ export default function FdodoDashboard() {
                   </View>
                   <View style={styles.cardContent}>
                     <Text style={styles.cardText}>
-                      Quantity: {request.quantity?.toLocaleString?.() ?? ""} L
+                      Quantity: {request.quantity?.toLocaleString?.() ?? ""}
                     </Text>
-                    <Text style={styles.cardMeta}>
+                    {/* <Text style={styles.cardMeta}>
                       SAP: {request.sapStatus || "PENDING"}{" "}
                       {new Date(request.requestedAt).toLocaleString("en-IN")}
-                    </Text>
-                    {request.requiresConfirmation && (
+                    </Text> */}
+                    {/* {request.requiresConfirmation && (
                       <Text style={styles.noticeText}>
                         Awaiting confirmation
                       </Text>
-                    )}
+                    )} */}
                   </View>
                 </View>
               );

@@ -543,7 +543,7 @@ export default function DriverApprovals() {
           {item.trainingCompleted ? "Completed" : "Pending"}
         </Text>
       </View>
-      {item.trainingModules?.length ? (
+      {/* {item.trainingModules?.length ? (
         <View style={styles.trainingContainer}>
           {item.trainingModules.map((module) => (
             <View key={module} style={styles.trainingChip}>
@@ -551,18 +551,18 @@ export default function DriverApprovals() {
             </View>
           ))}
         </View>
-      ) : null}
-      <Text style={styles.remarksLabel}>Remarks</Text>
-      <Text style={styles.remarksText}>{item.remarks || "—"}</Text>
+      ) : null} */}
+      {/* <Text style={styles.remarksLabel}>Remarks</Text>
+      <Text style={styles.remarksText}>{item.remarks || "—"}</Text> */}
 
-      <View style={styles.documentsContainer}>
+      {/* <View style={styles.documentsContainer}>
         {(item.documents || []).map((doc) => (
           <View key={`${item.id}-${doc.type}`} style={styles.documentRow}>
             <Text style={styles.documentType}>{doc.type}</Text>
             <Text style={styles.documentUrl}>{doc.url}</Text>
           </View>
         ))}
-      </View>
+      </View> */}
 
       {canManageDrivers ? (
         <View style={styles.cardActions}>
@@ -735,7 +735,7 @@ export default function DriverApprovals() {
                 />
               </View>
 
-              <View style={styles.formGroup}>
+              {/* <View style={styles.formGroup}>
                 <Text style={styles.inputLabel}>
                   Training modules (comma separated)
                 </Text>
@@ -750,9 +750,9 @@ export default function DriverApprovals() {
                   }
                   placeholder="Hazmat Handling, Emergency Response"
                 />
-              </View>
+              </View> */}
 
-              <View style={styles.formGroup}>
+              {/* <View style={styles.formGroup}>
                 <Text style={styles.inputLabel}>Notes</Text>
                 <TextInput
                   style={[styles.input, styles.notesInput]}
@@ -764,7 +764,7 @@ export default function DriverApprovals() {
                   numberOfLines={4}
                   placeholder="Add any remarks for dispatch or compliance teams"
                 />
-              </View>
+              </View> */}
 
               <View style={styles.modalActions}>
                 <TouchableOpacity

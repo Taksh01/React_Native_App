@@ -47,27 +47,96 @@ export default function ManualTokenAssignment() {
     return StyleSheet.create({
       container: { flex: 1, backgroundColor: theme.colors.background },
       content: { padding: theme.spacing(4), paddingBottom: 40 },
-      card: { backgroundColor: theme.colors.surfaceElevated, borderRadius: theme.radii.lg, padding: theme.spacing(4), marginBottom: theme.spacing(4), borderWidth: 1, borderColor: theme.colors.borderSubtle, ...theme.shadows.level1 },
-      sectionTitle: { fontSize: theme.typography.sizes.bodyLarge, fontWeight: theme.typography.weightSemiBold, color: theme.colors.textPrimary, marginBottom: theme.spacing(3) },
+      card: {
+        backgroundColor: theme.colors.surfaceElevated,
+        borderRadius: theme.radii.lg,
+        padding: theme.spacing(4),
+        marginBottom: theme.spacing(4),
+        borderWidth: 1,
+        borderColor: theme.colors.borderSubtle,
+        ...theme.shadows.level1,
+      },
+      sectionTitle: {
+        fontSize: theme.typography.sizes.bodyLarge,
+        fontWeight: theme.typography.weightSemiBold,
+        color: theme.colors.textPrimary,
+        marginBottom: theme.spacing(3),
+      },
       fieldGroup: { marginBottom: theme.spacing(3) },
-      label: { fontSize: theme.typography.sizes.body, fontWeight: theme.typography.weightSemiBold, color: theme.colors.textSecondary, marginBottom: theme.spacing(2) },
-      input: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: theme.radii.md, paddingHorizontal: theme.spacing(3), paddingVertical: theme.spacing(3), backgroundColor: theme.colors.surfaceMuted, color: theme.colors.textPrimary, fontSize: theme.typography.sizes.bodyLarge },
+      label: {
+        fontSize: theme.typography.sizes.body,
+        fontWeight: theme.typography.weightSemiBold,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing(2),
+      },
+      input: {
+        borderWidth: 1,
+        borderColor: "#cbd5e1",
+        borderRadius: theme.radii.md,
+        paddingHorizontal: theme.spacing(3),
+        paddingVertical: theme.spacing(3),
+        backgroundColor: theme.colors.surfaceMuted,
+        color: theme.colors.textPrimary,
+        fontSize: theme.typography.sizes.bodyLarge,
+      },
       notesInput: { minHeight: 80, textAlignVertical: "top" },
       row: { flexDirection: "row" },
       rowItem: { flex: 1 },
       rowItemSpacer: { marginRight: theme.spacing(3) },
-      submitButton: { marginTop: theme.spacing(2), backgroundColor: theme.colors.primary, paddingVertical: theme.spacing(4), borderRadius: theme.radii.md, alignItems: "center" },
+      submitButton: {
+        marginTop: theme.spacing(2),
+        backgroundColor: theme.colors.primary,
+        paddingVertical: theme.spacing(4),
+        borderRadius: theme.radii.md,
+        alignItems: "center",
+      },
       submitButtonDisabled: { opacity: 0.7 },
-      submitButtonText: { color: theme.colors.surfaceElevated, fontSize: theme.typography.sizes.bodyLarge, fontWeight: theme.typography.weightSemiBold },
+      submitButtonText: {
+        color: theme.colors.surfaceElevated,
+        fontSize: theme.typography.sizes.bodyLarge,
+        fontWeight: theme.typography.weightSemiBold,
+      },
       loader: { paddingVertical: theme.spacing(6), alignItems: "center" },
-      emptyState: { fontSize: theme.typography.sizes.body, color: theme.colors.textSecondary },
-      tokenCard: { paddingVertical: theme.spacing(3), borderBottomWidth: 1, borderBottomColor: theme.colors.borderSubtle },
-      tokenHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: theme.spacing(1) },
-      tokenId: { fontSize: theme.typography.sizes.bodyLarge, fontWeight: theme.typography.weightBold, color: theme.colors.textPrimary },
-      tokenStatus: { fontSize: theme.typography.sizes.body, fontWeight: theme.typography.weightSemiBold, color: "#16a34a" },
-      tokenMeta: { fontSize: theme.typography.sizes.body, color: theme.colors.textSecondary, marginBottom: theme.spacing(1) },
-      tokenNotes: { fontSize: theme.typography.sizes.body, color: "#1e3a8a", marginTop: theme.spacing(1) },
-      tokenFooter: { marginTop: theme.spacing(2), fontSize: theme.typography.sizes.caption, color: theme.colors.textMuted },
+      emptyState: {
+        fontSize: theme.typography.sizes.body,
+        color: theme.colors.textSecondary,
+      },
+      tokenCard: {
+        paddingVertical: theme.spacing(3),
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.borderSubtle,
+      },
+      tokenHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: theme.spacing(1),
+      },
+      tokenId: {
+        fontSize: theme.typography.sizes.bodyLarge,
+        fontWeight: theme.typography.weightBold,
+        color: theme.colors.textPrimary,
+      },
+      tokenStatus: {
+        fontSize: theme.typography.sizes.body,
+        fontWeight: theme.typography.weightSemiBold,
+        color: "#16a34a",
+      },
+      tokenMeta: {
+        fontSize: theme.typography.sizes.body,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing(1),
+      },
+      tokenNotes: {
+        fontSize: theme.typography.sizes.body,
+        color: "#1e3a8a",
+        marginTop: theme.spacing(1),
+      },
+      tokenFooter: {
+        marginTop: theme.spacing(2),
+        fontSize: theme.typography.sizes.caption,
+        color: theme.colors.textMuted,
+      },
     });
   });
 
@@ -80,31 +149,28 @@ export default function ManualTokenAssignment() {
 
   const resetForm = () => setForm(createInitialForm());
 
-  const loadTokens = useCallback(
-    async (silent = false) => {
+  const loadTokens = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
+    try {
+      const response = await GTS.getManualTokenAssignments();
+      setTokens(normalizeTokens(response));
+    } catch (error) {
+      console.warn("Failed to load manual tokens", error);
       if (!silent) {
-        setLoading(true);
+        Alert.alert(
+          "Unable to load tokens",
+          "Manual token history could not be retrieved. Please try again."
+        );
       }
-      try {
-        const response = await GTS.getManualTokenAssignments();
-        setTokens(normalizeTokens(response));
-      } catch (error) {
-        console.warn("Failed to load manual tokens", error);
-        if (!silent) {
-          Alert.alert(
-            "Unable to load tokens",
-            "Manual token history could not be retrieved. Please try again."
-          );
-        }
-      } finally {
-        if (!silent) {
-          setLoading(false);
-        }
-        setRefreshing(false);
+    } finally {
+      if (!silent) {
+        setLoading(false);
       }
-    },
-    []
-  );
+      setRefreshing(false);
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -220,7 +286,7 @@ export default function ManualTokenAssignment() {
               autoCapitalize="characters"
             />
           </View>
-          <View style={[styles.fieldGroup, styles.rowItem]}>
+          {/* <View style={[styles.fieldGroup, styles.rowItem]}>
             <Text style={styles.label}>MS Slot</Text>
             <TextInput
               value={form.msSlot}
@@ -229,9 +295,9 @@ export default function ManualTokenAssignment() {
               placeholder="Bay-A"
               autoCapitalize="characters"
             />
-          </View>
+          </View> */}
         </View>
-
+        {/* 
         <View style={styles.row}>
           <View
             style={[styles.fieldGroup, styles.rowItem, styles.rowItemSpacer]}
@@ -255,9 +321,9 @@ export default function ManualTokenAssignment() {
               keyboardType="numeric"
             />
           </View>
-        </View>
+        </View> */}
 
-        <View style={styles.row}>
+        {/* <View style={styles.row}>
           <View
             style={[styles.fieldGroup, styles.rowItem, styles.rowItemSpacer]}
           >
@@ -280,9 +346,9 @@ export default function ManualTokenAssignment() {
               autoCapitalize="none"
             />
           </View>
-        </View>
+        </View> */}
 
-        <View style={styles.fieldGroup}>
+        {/* <View style={styles.fieldGroup}>
           <Text style={styles.label}>Notes</Text>
           <TextInput
             value={form.notes}
@@ -292,7 +358,7 @@ export default function ManualTokenAssignment() {
             multiline
             numberOfLines={3}
           />
-        </View>
+        </View> */}
 
         <TouchableOpacity
           style={[
@@ -303,7 +369,9 @@ export default function ManualTokenAssignment() {
           disabled={submitting}
         >
           {submitting ? (
-            <ActivityIndicator color={themeRef.current?.colors?.surfaceElevated || "#ffffff"} />
+            <ActivityIndicator
+              color={themeRef.current?.colors?.surfaceElevated || "#ffffff"}
+            />
           ) : (
             <Text style={styles.submitButtonText}>Assign Token</Text>
           )}
@@ -314,7 +382,9 @@ export default function ManualTokenAssignment() {
         <Text style={styles.sectionTitle}>Recent Manual Tokens</Text>
         {loading ? (
           <View style={styles.loader}>
-            <ActivityIndicator color={themeRef.current?.colors?.loaderSecondary || "#2563eb"} />
+            <ActivityIndicator
+              color={themeRef.current?.colors?.loaderSecondary || "#2563eb"}
+            />
           </View>
         ) : tokens.length === 0 ? (
           <Text style={styles.emptyState}>
@@ -337,20 +407,20 @@ export default function ManualTokenAssignment() {
                 MS Station: {token.msStation || "-"}
                 {token.msSlot ? ` (${token.msSlot})` : ""}
               </Text>
-              <Text style={styles.tokenMeta}>
+              {/* <Text style={styles.tokenMeta}>
                 Product: {token.product} {String(token.quantity || "")}{" "}
                 {token.unit}
-              </Text>
-              {token.validUntil ? (
+              </Text> */}
+              {/* {token.validUntil ? (
                 <Text style={styles.tokenMeta}>
                   Valid Until: {token.validUntil}
                 </Text>
-              ) : null}
-              {token.notes ? (
+              ) : null} */}
+              {/* {token.notes ? (
                 <Text style={styles.tokenNotes}>{token.notes}</Text>
-              ) : null}
+              ) : null} */}
               <Text style={styles.tokenFooter}>
-                Assigned at {token.assignedAt} by {token.assignedBy || "EIC"}
+                Assigned at {token.assignedAt}
               </Text>
             </View>
           ))
@@ -359,5 +429,3 @@ export default function ManualTokenAssignment() {
     </ScrollView>
   );
 }
-
-

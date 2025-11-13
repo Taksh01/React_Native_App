@@ -384,7 +384,7 @@ export default function TripAcceptance() {
             <Text style={styles.tripId}>{item.id}</Text>
             <Text style={styles.routeText}>{item.route}</Text>
           </View>
-          <View style={styles.badges}>
+          {/* <View style={styles.badges}>
             <View
               style={[styles.urgencyBadge, { backgroundColor: urgency.color }]}
             >
@@ -405,7 +405,7 @@ export default function TripAcceptance() {
                 {item.priority}
               </Text>
             </View>
-          </View>
+          </View> */}
         </View>
 
         <View style={styles.tripDetails}>
@@ -419,12 +419,12 @@ export default function TripAcceptance() {
             <Text style={styles.detailLabel}>Vehicle:</Text>
             <Text style={styles.detailValue}>{item.vehicleNumber}</Text>
           </View>
-          <View style={styles.detailRow}>
+          {/* <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Cargo:</Text>
             <Text style={styles.detailValue}>
               {item.cargoType} • {item.quantity.toLocaleString()}L
             </Text>
-          </View>
+          </View> */}
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Driver Status:</Text>
             <Text style={[styles.detailValue, { color: "#ef4444" }]}>
@@ -433,7 +433,7 @@ export default function TripAcceptance() {
           </View>
         </View>
 
-        {item.notes && <Text style={styles.notes}>Note: {item.notes}</Text>}
+        {/* {item.notes && <Text style={styles.notes}>Note: {item.notes}</Text>} */}
 
         <View style={styles.actionContainer}>
           <TouchableOpacity

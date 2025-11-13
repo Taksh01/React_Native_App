@@ -1,14 +1,18 @@
-import React from 'react';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import RoleSelectScreen from '../screens/RoleSelectScreen';
-import LoginScreen from '../screens/LoginScreen';
-import RoleTabs from './RoleTabs';
-import { useAuth } from '../store/auth';
+import React from "react";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import RoleSelectScreen from "../screens/RoleSelectScreen";
+import LoginScreen from "../screens/LoginScreen";
+import RoleTabs from "./RoleTabs";
+import { useAuth } from "../store/auth";
 
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
-  const { user } = useAuth();
+  const { user, hydrated } = useAuth();
+
+  if (!hydrated) {
+    return null;
+  }
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!user ? (

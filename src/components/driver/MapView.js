@@ -1,15 +1,10 @@
 import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import AppIcon from "../AppIcon";
 
 /**
  * MapView Component for Driver Navigation
- * 
+ *
  * For now, this is a placeholder that simulates map functionality.
  * In production, this would integrate with:
  * - react-native-maps
@@ -17,11 +12,11 @@ import AppIcon from "../AppIcon";
  * - Real-time GPS tracking
  */
 
-export default function MapView({ 
-  destination, 
-  currentLocation, 
+export default function MapView({
+  destination,
+  currentLocation,
   onLocationUpdate,
-  showRoute = true 
+  showRoute = true,
 }) {
   const [isLoading, setIsLoading] = useState(true);
   const [routeInfo, setRouteInfo] = useState(null);
@@ -32,7 +27,7 @@ export default function MapView({
       setRouteInfo({
         distance: "15.2 km",
         duration: "25 mins",
-        traffic: "Light traffic"
+        traffic: "Light traffic",
       });
       setIsLoading(false);
     }, 2000);
@@ -48,7 +43,7 @@ export default function MapView({
         const mockLocation = {
           latitude: 12.9716 + (Math.random() - 0.5) * 0.01,
           longitude: 77.5946 + (Math.random() - 0.5) * 0.01,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         };
         onLocationUpdate(mockLocation);
       }, 5000); // Update every 5 seconds
@@ -71,17 +66,24 @@ export default function MapView({
       {/* Map Placeholder */}
       <View style={styles.mapContainer}>
         <View style={styles.titleRow}>
-          <AppIcon icon="map" size={18} color="#007AFF" style={styles.titleIcon} />
+          <AppIcon
+            icon="map"
+            size={18}
+            color="#007AFF"
+            style={styles.titleIcon}
+          />
           <Text style={styles.mapTitle}>Navigation</Text>
         </View>
         {/* Destination Info */}
         <View style={styles.destinationCard}>
-          <Text style={styles.destinationTitle}>Destination: {destination?.name}</Text>
+          <Text style={styles.destinationTitle}>
+            Destination: {destination?.name}
+          </Text>
           <Text style={styles.destinationAddress}>{destination?.address}</Text>
         </View>
 
         {/* Route Info */}
-        {showRoute && routeInfo && (
+        {/* {showRoute && routeInfo && (
           <View style={styles.routeCard}>
             <View style={styles.routeRow}>
               <Text style={styles.routeLabel}>Distance:</Text>
@@ -96,24 +98,35 @@ export default function MapView({
               <Text style={styles.routeValue}>{routeInfo.traffic}</Text>
             </View>
           </View>
-        )}
+        )} */}
 
         {/* Current Location */}
         {currentLocation && (
           <View style={styles.locationCard}>
             <Text style={styles.locationTitle}>Your Location</Text>
             <Text style={styles.locationCoords}>
-              {currentLocation.latitude?.toFixed(4)}, {currentLocation.longitude?.toFixed(4)}
+              {currentLocation.latitude?.toFixed(4)},{" "}
+              {currentLocation.longitude?.toFixed(4)}
             </Text>
           </View>
         )}
 
         {/* Map Visual Placeholder */}
         <View style={styles.mapVisual}>
-          <AppIcon icon="mapTruck" size={32} color="#007AFF" style={styles.mapVisualIcon} />
+          <AppIcon
+            icon="mapTruck"
+            size={32}
+            color="#007AFF"
+            style={styles.mapVisualIcon}
+          />
           <Text style={styles.mapVisualLabel}>You are here</Text>
           <View style={styles.routeLine} />
-          <AppIcon icon="stationPin" size={24} color="#FF3B30" style={styles.destinationMarkerIcon} />
+          <AppIcon
+            icon="stationPin"
+            size={24}
+            color="#FF3B30"
+            style={styles.destinationMarkerIcon}
+          />
           <Text style={styles.destinationLabel}>{destination?.name}</Text>
         </View>
       </View>
@@ -127,28 +140,28 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f0f8ff',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f8ff",
     borderRadius: 8,
     minHeight: 200,
   },
   loadingText: {
     marginTop: 8,
     fontSize: 14,
-    color: '#007AFF',
+    color: "#007AFF",
   },
   mapContainer: {
     flex: 1,
-    backgroundColor: '#f0f8ff',
+    backgroundColor: "#f0f8ff",
     borderRadius: 8,
     padding: 16,
     minHeight: 300,
   },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 16,
   },
   titleIcon: {
@@ -156,72 +169,72 @@ const styles = StyleSheet.create({
   },
   mapTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#007AFF',
+    fontWeight: "bold",
+    color: "#007AFF",
   },
   destinationCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
   destinationTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
     marginBottom: 4,
   },
   destinationAddress: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   routeCard: {
-    backgroundColor: '#e8f4fd',
+    backgroundColor: "#e8f4fd",
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
   },
   routeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 4,
   },
   routeLabel: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   routeValue: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#007AFF',
+    fontWeight: "600",
+    color: "#007AFF",
   },
   locationCard: {
-    backgroundColor: '#f0f9ff',
+    backgroundColor: "#f0f9ff",
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
   },
   locationTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
     marginBottom: 4,
   },
   locationCoords: {
     fontSize: 12,
-    color: '#666',
-    fontFamily: 'monospace',
+    color: "#666",
+    fontFamily: "monospace",
   },
   mapVisual: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
     minHeight: 120,
   },
   mapVisualIcon: {
@@ -229,13 +242,13 @@ const styles = StyleSheet.create({
   },
   mapVisualLabel: {
     fontSize: 12,
-    color: '#007AFF',
-    fontWeight: '600',
+    color: "#007AFF",
+    fontWeight: "600",
   },
   routeLine: {
     width: 2,
     height: 40,
-    backgroundColor: '#007AFF',
+    backgroundColor: "#007AFF",
     marginVertical: 8,
   },
   destinationMarkerIcon: {
@@ -243,10 +256,8 @@ const styles = StyleSheet.create({
   },
   destinationLabel: {
     fontSize: 12,
-    color: '#FF3B30',
-    fontWeight: '600',
-    textAlign: 'center',
+    color: "#FF3B30",
+    fontWeight: "600",
+    textAlign: "center",
   },
 });
-
-

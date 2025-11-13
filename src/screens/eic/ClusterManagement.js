@@ -582,29 +582,39 @@ export default function ClusterManagement() {
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View>
+          {/* <View>
             <Text style={styles.clusterName}>{item.name}</Text>
             <Text style={styles.clusterId}>{item.id}</Text>
+          </View> */}
+
+          <View style={styles.msCard}>
+            <Text style={styles.msTitle}>{ms.name || ms.id}</Text>
+            <Text style={styles.msMeta}>
+              Location: {ms.location || "Unknown"}
+            </Text>
+            {/* <Text style={styles.msMeta}>
+            Capacity: {ms.capacity != null ? ms.capacity : "—"} scm
+          </Text> */}
           </View>
           <View style={styles.clusterBadges}>
             <View style={styles.clusterBadge}>
               <Text style={styles.badgeLabel}>DBS Count</Text>
               <Text style={styles.badgeValue}>{dbsStations.length}</Text>
             </View>
-            <View style={styles.clusterBadge}>
+            {/* <View style={styles.clusterBadge}>
               <Text style={styles.badgeLabel}>Network Capacity</Text>
               <Text style={styles.badgeValue}>{totalCapacity} scm</Text>
-            </View>
-            <View style={styles.clusterBadge}>
+            </View> */}
+            {/* <View style={styles.clusterBadge}>
               <Text style={styles.badgeLabel}>MS Capacity</Text>
               <Text style={styles.badgeValue}>
                 {ms.capacity != null ? ms.capacity : "—"} scm
               </Text>
-            </View>
+            </View> */}
           </View>
         </View>
 
-        <View style={styles.msCard}>
+        {/* <View style={styles.msCard}>
           <Text style={styles.msTitle}>{ms.name || ms.id}</Text>
           <Text style={styles.msMeta}>
             Location: {ms.location || "Unknown"}
@@ -612,7 +622,7 @@ export default function ClusterManagement() {
           <Text style={styles.msMeta}>
             Capacity: {ms.capacity != null ? ms.capacity : "—"} scm
           </Text>
-        </View>
+        </View> */}
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -657,10 +667,10 @@ export default function ClusterManagement() {
           </View>
         </View>
 
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>Notes</Text>
           <Text style={styles.notesText}>{item.notes || "—"}</Text>
-        </View>
+        </View> */}
 
         <View style={styles.footerRow}>
           <Text style={styles.footerLabel}>

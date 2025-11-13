@@ -764,7 +764,7 @@ export default function DriverDashboard({ navigation, route }) {
             Pre-{isMS ? "Fill" : "Delivery"} Reading:
           </Text>
           <View style={styles.readingRow}>
-            <Text style={styles.readingValue}>{preReading} L</Text>
+            <Text style={styles.readingValue}>{preReading} </Text>
             {!preConfirmed ? (
               <View style={styles.confirmButtons}>
                 <AppButton
@@ -808,7 +808,7 @@ export default function DriverDashboard({ navigation, route }) {
             </Text>
             {postReading ? (
               <View style={styles.readingRow}>
-                <Text style={styles.readingValue}>{postReading} L</Text>
+                <Text style={styles.readingValue}>{postReading} </Text>
                 {!postConfirmed ? (
                   <View style={styles.confirmButtons}>
                     <AppButton

@@ -336,7 +336,7 @@ export default function StockTransfersView({
             Priority: {(item.priority || "standard").toUpperCase()}
           </Text> */}
           </View>
-          <View
+          {/* <View
             style={[
               styles.statusBadge,
               { backgroundColor: `${getStatusColor(item.status)}1A` },
@@ -350,13 +350,13 @@ export default function StockTransfersView({
             >
               {getDisplayStatus(item.status)}
             </Text>
-          </View>
+          </View> */}
         </View>
 
         <View style={styles.productInfo}>
           <Text style={styles.productName}>{getProductLabel(item)}</Text>
           <Text style={styles.quantity}>
-            {item.quantity?.toLocaleString?.() || item.quantity || 0} L
+            {item.quantity?.toLocaleString?.() || item.quantity || 0}
           </Text>
         </View>
 

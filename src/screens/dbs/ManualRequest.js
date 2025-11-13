@@ -10,7 +10,9 @@ import {
   TouchableOpacity,
   Modal,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+} from "@react-native-community/datetimepicker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AppTextField from "../../components/AppTextField";
 import AppButton from "../../components/AppButton";
@@ -35,10 +37,49 @@ export default function ManualRequest() {
       day: "numeric",
     }) ?? "";
   const formatTime = (d) =>
-    d?.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) ??
-    "";
+    d
+      ? new Intl.DateTimeFormat("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        }).format(d)
+      : "";
+
+  const isIOS = Platform.OS === "ios";
+
+  const applySelection = (base, selected, mode) => {
+    const next = new Date(base ?? new Date());
+
+    if (mode === "date") {
+      next.setFullYear(
+        selected.getFullYear(),
+        selected.getMonth(),
+        selected.getDate()
+      );
+    } else {
+      next.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
+    }
+
+    setRequiredBy(next);
+  };
 
   const openPicker = (mode) => {
+    const base = requiredBy ?? new Date();
+
+    if (!isIOS) {
+      DateTimePickerAndroid.open({
+        value: base,
+        mode,
+        is24Hour: false,
+        minimumDate: mode === "date" ? new Date() : undefined,
+        onChange: (event, date) => {
+          if (event.type === "dismissed" || !date) return;
+          applySelection(requiredBy, date, mode);
+        },
+      });
+      return;
+    }
+
     setPickerMode(mode);
     setTempDate(requiredBy ?? new Date());
     setPickerVisible(true);
@@ -49,20 +90,9 @@ export default function ManualRequest() {
   };
 
   const onPickerDone = () => {
-    const base = requiredBy ?? new Date();
-    const next = new Date(base);
-
-    if (pickerMode === "date") {
-      next.setFullYear(
-        tempDate.getFullYear(),
-        tempDate.getMonth(),
-        tempDate.getDate()
-      );
-    } else if (pickerMode === "time") {
-      next.setHours(tempDate.getHours(), tempDate.getMinutes(), 0, 0);
+    if (pickerMode) {
+      applySelection(requiredBy, tempDate, pickerMode);
     }
-
-    setRequiredBy(next);
     setPickerVisible(false);
     setPickerMode(null);
   };
@@ -70,24 +100,6 @@ export default function ManualRequest() {
   const onPickerCancel = () => {
     setPickerVisible(false);
     setPickerMode(null);
-  };
-
-  const onSelectDate = (_event, date) => {
-    setShowDatePicker(false);
-    if (!date) return;
-    const base = requiredBy ?? new Date();
-    const next = new Date(base);
-    next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-    setRequiredBy(next);
-  };
-
-  const onSelectTime = (_event, time) => {
-    setShowTimePicker(false);
-    if (!time) return;
-    const base = requiredBy ?? new Date();
-    const next = new Date(base);
-    next.setHours(time.getHours(), time.getMinutes(), 0, 0);
-    setRequiredBy(next);
   };
 
   const styles = useThemedStyles((theme) =>
@@ -169,10 +181,20 @@ export default function ManualRequest() {
         paddingHorizontal: theme.spacing(3),
         flexDirection: "row",
         alignItems: "center",
-        gap: theme.spacing(2),
-      },
-      touchFieldText: {
-        fontSize: theme.typography.sizes.body,
+        justifyContent: "space-between",
+        touchFieldInner: {
+          height: 48,
+          paddingHorizontal: theme.spacing(3),
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        },
+        touchFieldLabel: {
+          fontSize: theme.typography.sizes.caption,
+          color: theme.colors.textSecondary,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+        },
         color: theme.colors.textPrimary,
       },
 
@@ -350,9 +372,9 @@ export default function ManualRequest() {
                   onPress={() => openPicker("date")}
                 >
                   <View style={styles.touchFieldInner}>
-                    <AppIcon icon="calendar" size={18} color="#1e293b" />
+                    <Text style={styles.touchFieldLabel}>Date</Text>
                     <Text style={styles.touchFieldText}>
-                      {requiredBy ? formatDate(requiredBy) : "Pick date"}
+                      {requiredBy ? formatDate(requiredBy) : "Select"}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -363,9 +385,9 @@ export default function ManualRequest() {
                   onPress={() => openPicker("time")}
                 >
                   <View style={styles.touchFieldInner}>
-                    <AppIcon icon="clock" size={18} color="#1e293b" />
+                    <Text style={styles.touchFieldLabel}>Time</Text>
                     <Text style={styles.touchFieldText}>
-                      {requiredBy ? formatTime(requiredBy) : "Pick time"}
+                      {requiredBy ? formatTime(requiredBy) : "Select"}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -405,47 +427,51 @@ export default function ManualRequest() {
         </View>
       </KeyboardAvoidingView>
 
-      <Modal
-        visible={pickerVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={onPickerCancel}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {pickerMode === "date" ? "Select Date" : "Select Time"}
-              </Text>
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={onPickerCancel}
-                >
-                  <Text style={styles.actionText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionPrimary]}
-                  onPress={onPickerDone}
-                >
-                  <Text style={styles.actionTextPrimary}>Done</Text>
-                </TouchableOpacity>
+      {isIOS && (
+        <Modal
+          visible={pickerVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={onPickerCancel}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {pickerMode === "date" ? "Select Date" : "Select Time"}
+                </Text>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={onPickerCancel}
+                  >
+                    <Text style={styles.actionText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionPrimary]}
+                    onPress={onPickerDone}
+                  >
+                    <Text style={styles.actionTextPrimary}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.pickerWrap}>
+                <DateTimePicker
+                  value={tempDate}
+                  mode={pickerMode ?? "date"}
+                  display="spinner"
+                  onChange={onTempChange}
+                  {...(pickerMode === "date"
+                    ? { minimumDate: new Date() }
+                    : {})}
+                  minuteInterval={5}
+                />
               </View>
             </View>
-
-            <View style={styles.pickerWrap}>
-              <DateTimePicker
-                value={tempDate}
-                mode={pickerMode ?? "date"}
-                display={Platform.OS === "ios" ? "spinner" : "spinner"} // keep it open
-                onChange={onTempChange}
-                {...(pickerMode === "date" ? { minimumDate: new Date() } : {})}
-                minuteInterval={5}
-              />
-            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }

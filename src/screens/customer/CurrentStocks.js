@@ -237,19 +237,19 @@ export default function CurrentStocks() {
         <View style={styles.stockRow}>
           <Text style={styles.stockLabel}>Current Stock</Text>
           <Text style={styles.stockValue}>
-            {item.currentStock.toLocaleString()} L
+            {item.currentStock.toLocaleString()}
           </Text>
         </View>
         <View style={styles.stockRow}>
           <Text style={styles.stockLabel}>Capacity</Text>
           <Text style={styles.stockValue}>
-            {item.capacity.toLocaleString()} L
+            {item.capacity.toLocaleString()}
           </Text>
         </View>
         <View style={styles.stockRow}>
           <Text style={styles.stockLabel}>Available Space</Text>
           <Text style={styles.stockValue}>
-            {(item.capacity - item.currentStock).toLocaleString()} L
+            {(item.capacity - item.currentStock).toLocaleString()}
           </Text>
         </View>
       </View>
@@ -317,7 +317,7 @@ export default function CurrentStocks() {
         </View>
       </View>
 
-      <FlatList
+      {/* <FlatList
         data={stocks}
         renderItem={renderStockCard}
         keyExtractor={(item) => item.id}
@@ -343,7 +343,7 @@ export default function CurrentStocks() {
             </View>
           )
         }
-      />
+      /> */}
     </SafeAreaView>
   );
 }

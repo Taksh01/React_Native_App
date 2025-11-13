@@ -371,18 +371,18 @@ export default function FDODORequest() {
         </View>
         <View style={styles.requestContent}>
           <Text style={styles.requestMeta}>
-            Quantity: {request.quantity?.toLocaleString?.() ?? "--"} L
+            Quantity: {request.quantity?.toLocaleString?.() ?? "--"}
           </Text>
-          <Text style={styles.requestMeta}>
+          {/* <Text style={styles.requestMeta}>
             SAP: {request.sapStatus || "--"}
-          </Text>
+          </Text> */}
           <Text style={styles.requestMeta}>Requested: {createdAt}</Text>
-          {request.notes && (
+          {/* {request.notes && (
             <Text style={styles.requestNotes}>Note: {request.notes}</Text>
-          )}
-          {request.blockReason && (
+          )} */}
+          {/* {request.blockReason && (
             <Text style={styles.requestWarning}>{request.blockReason}</Text>
-          )}
+          )} */}
         </View>
         {request.requiresConfirmation && (
           <View style={styles.confirmSection}>
@@ -448,26 +448,26 @@ export default function FDODORequest() {
                   <View style={styles.creditItemInner}>
                     <Text style={styles.creditLabel}>Available</Text>
                     <Text style={styles.creditValue}>
-                      {credit.available?.toLocaleString?.() ?? "0"} L
+                      {credit.available?.toLocaleString?.() ?? "0"}
                     </Text>
                   </View>
                 </View>
                 <View style={styles.creditItem}>
-                  <View style={styles.creditItemInner}>
+                  {/* <View style={styles.creditItemInner}>
                     <Text style={styles.creditLabel}>Reserved</Text>
                     <Text style={styles.creditValue}>
-                      {credit.reserved?.toLocaleString?.() ?? "0"} L
+                      {credit.reserved?.toLocaleString?.() ?? "0"}
                     </Text>
-                  </View>
+                  </View> */}
                 </View>
-                <View style={styles.creditItem}>
+                {/* <View style={styles.creditItem}>
                   <View style={styles.creditItemInner}>
                     <Text style={styles.creditLabel}>Limit</Text>
                     <Text style={styles.creditValue}>
-                      {credit.limit?.toLocaleString?.() ?? "0"} L
+                      {credit.limit?.toLocaleString?.() ?? "0"}
                     </Text>
                   </View>
-                </View>
+                </View> */}
               </View>
               <View style={styles.creditFooter}>
                 <Text style={styles.creditFooterText}>
@@ -482,7 +482,7 @@ export default function FDODORequest() {
             <View style={styles.card}>
               <View style={styles.formContainer}>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Quantity (litres)</Text>
+                  <Text style={styles.label}>Quantity</Text>
                   <AppTextField
                     keyboardType="numeric"
                     value={quantity}

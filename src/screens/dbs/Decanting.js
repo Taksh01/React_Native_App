@@ -42,7 +42,7 @@ export default function Decanting() {
   const [step, setStep] = useState(0);
   const [qty, setQty] = useState("");
   const [opAck, setOpAck] = useState(false);
-  const [drvAck, setDrvAck] = useState(false);
+  const [drvAck, setDrvAck] = useState(true);
   const [sapPushed, setSapPushed] = useState(false);
 
   const [currentToken, setCurrentToken] = useState(null);
@@ -253,7 +253,7 @@ export default function Decanting() {
       // Reset flow to start
       setQty("");
       setOpAck(false);
-      setDrvAck(false);
+      setDrvAck(true);
       setSapPushed(false);
       setStep(0);
       signalArrival.reset();
@@ -742,7 +742,7 @@ export default function Decanting() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Delivered Quantity (kg)</Text>
+              <Text style={styles.inputLabel}>Delivered Quantity</Text>
               <AppTextField
                 ref={qtyRef}
                 value={qty}
@@ -778,7 +778,7 @@ export default function Decanting() {
                 }
                 style={styles.ackButton}
               />
-              <AppButton
+              {/* <AppButton
                 title={drvAck ? "Driver Confirmed" : "Driver Acknowledgment"}
                 onPress={() => setDrvAck(true)}
                 disabled={ackButtonsDisabled || drvAck}
@@ -790,7 +790,7 @@ export default function Decanting() {
                     : "primary"
                 }
                 style={styles.ackButton}
-              />
+              /> */}
             </View>
 
             <AppButton

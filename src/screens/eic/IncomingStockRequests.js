@@ -27,7 +27,7 @@ const MOCK_REQUESTS = [
     status: "PENDING",
     priority: "HIGH",
     customer: "Reliance Industries",
-    dbsId: "DBS-15",
+    dbsId: "Vastral DBS",
     quantity: 15000,
     product: "LPG",
     requestedAt: "2025-01-15T10:30:00Z",
@@ -39,7 +39,7 @@ const MOCK_REQUESTS = [
     status: "PENDING",
     priority: "MEDIUM",
     customer: "DBS Station 12",
-    dbsId: "DBS-12",
+    dbsId: "Vasai DBS",
     quantity: 8000,
     product: "LPG",
     requestedAt: "2025-01-15T09:15:00Z",
@@ -51,7 +51,7 @@ const MOCK_REQUESTS = [
     status: "APPROVED",
     priority: "LOW",
     customer: "AI Forecast",
-    dbsId: "DBS-08",
+    dbsId: "Jamnagar DBS",
     quantity: 5000,
     product: "LPG",
     requestedAt: "2025-01-14T16:45:00Z",
@@ -63,7 +63,7 @@ const MOCK_REQUESTS = [
     status: "REJECTED",
     priority: "HIGH",
     customer: "Tata Steel",
-    dbsId: "DBS-20",
+    dbsId: "Durgapur DBS",
     quantity: 20000,
     product: "LPG",
     requestedAt: "2025-01-14T14:20:00Z",
@@ -75,7 +75,7 @@ const MOCK_REQUESTS = [
     status: "APPROVED",
     priority: "MEDIUM",
     customer: "DBS Station 05",
-    dbsId: "DBS-05",
+    dbsId: "Godhra DBS",
     quantity: 12000,
     product: "LPG",
     requestedAt: "2025-01-14T11:00:00Z",
@@ -87,7 +87,7 @@ const MOCK_REQUESTS = [
     status: "PENDING",
     priority: "HIGH",
     customer: "AI Forecast",
-    dbsId: "DBS-18",
+    dbsId: "Uran DBS",
     quantity: 18000,
     product: "LPG",
     requestedAt: "2025-01-15T08:00:00Z",
@@ -495,9 +495,9 @@ export default function IncomingStockRequests() {
       <View style={styles.cardHeader}>
         <View style={{ flex: 1 }}>
           <Text style={styles.cardTitle}>{item.id}</Text>
-          <Text style={styles.cardSubtitle}>{item.customer}</Text>
+          {/* <Text style={styles.cardSubtitle}>{item.customer}</Text> */}
         </View>
-        <View
+        {/* <View
           style={[
             styles.typeIcon,
             { backgroundColor: `${getTypeColor(item.type)}1A` },
@@ -508,7 +508,7 @@ export default function IncomingStockRequests() {
             size={16}
             color={getTypeColor(item.type)}
           />
-        </View>
+        </View> */}
       </View>
 
       <View style={styles.badgeRow}>
@@ -541,14 +541,14 @@ export default function IncomingStockRequests() {
       </View>
       <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>Quantity</Text>
-        <Text style={styles.infoValue}>{item.quantity.toLocaleString()} L</Text>
+        <Text style={styles.infoValue}>{item.quantity.toLocaleString()} </Text>
       </View>
-      <View style={styles.infoRow}>
+      {/* <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>Product</Text>
         <Text style={styles.infoValue}>{item.product}</Text>
-      </View>
+      </View> */}
 
-      {item.notes && <Text style={styles.notesText}>{item.notes}</Text>}
+      {/* {item.notes && <Text style={styles.notesText}>{item.notes}</Text>} */}
 
       {item.status === "PENDING" && (
         <View style={styles.cardActions}>
@@ -664,7 +664,7 @@ export default function IncomingStockRequests() {
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Quantity</Text>
               <Text style={styles.detailValue}>
-                {selectedRequest?.quantity.toLocaleString()} L
+                {selectedRequest?.quantity.toLocaleString()}
               </Text>
             </View>
             <View style={styles.detailRow}>

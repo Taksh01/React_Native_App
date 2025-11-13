@@ -16,6 +16,7 @@ import Decanting from "../screens/dbs/Decanting";
 import ManualRequest from "../screens/dbs/ManualRequest";
 import DBSDashboard from "../screens/dbs/Dashboard";
 import DbsStockTransfers from "../screens/dbs/StockTransfers";
+import TripHistory from "../screens/driver/TripHistory";
 import DriverDashboard from "../screens/driver/DriverDashboard";
 import EmergencyAlert from "../screens/driver/EmergencyAlert";
 import SettingsScreen from "../screens/Settings";
@@ -249,18 +250,33 @@ export default function RoleTabs({ navigation }) {
         }}
       >
         <Tab.Screen
-          name="Dashboard"
-          component={DriverDashboard}
+          name="Trips"
+          component={TripHistory}
           options={{
+            title: "Trips",
             tabBarIcon: ({ color }) => (
               <AppIcon icon="dashboard" size={20} color={color} />
             ),
           }}
         />
         <Tab.Screen
+          name="DriverDashboard"
+          component={DriverDashboard}
+          options={{
+            tabBarIcon: ({ color }) => (
+              <AppIcon icon="vehicle" size={20} color={color} />
+            ),
+          }}
+        />
+        <Tab.Screen
           name="EmergencyAlert"
           component={EmergencyAlert}
-          options={{ tabBarButton: () => null }}
+          options={{
+            tabBarButton: () => null,
+            tabBarItemStyle: {
+              display: "none",
+            },
+          }}
         />
         <Tab.Screen
           name="Settings"

@@ -393,7 +393,7 @@ export default function VehicleTracking() {
           </View>
         </View>
 
-        <View style={styles.metricsRow}>
+        {/* <View style={styles.metricsRow}>
           <View style={styles.metric}>
             <Text style={styles.metricValue}>{item.speed}</Text>
             <Text style={styles.metricLabel}>km/h</Text>
@@ -406,7 +406,7 @@ export default function VehicleTracking() {
             <Text style={styles.metricValue}>{item.fuelLevel}%</Text>
             <Text style={styles.metricLabel}>Fuel</Text>
           </View>
-        </View>
+        </View> */}
 
         <View style={styles.cardFooter}>
           <View style={styles.adherenceContainer}>
@@ -549,20 +549,20 @@ export default function VehicleTracking() {
                 </Text>
               </View>
 
-              <View style={styles.detailSection}>
+              {/* <View style={styles.detailSection}>
                 <Text style={styles.detailLabel}>Speed</Text>
                 <Text style={styles.detailValue}>
                   {selectedVehicle.speed} km/h
                 </Text>
-              </View>
-
+              </View> */}
+              {/* 
               <View style={styles.detailSection}>
                 <Text style={styles.detailLabel}>ETA</Text>
                 <Text style={styles.detailValue}>
                   {formatETA(selectedVehicle.eta)} (
                   {new Date(selectedVehicle.eta).toLocaleString("en-IN")})
                 </Text>
-              </View>
+              </View> */}
 
               <View style={styles.detailSection}>
                 <Text style={styles.detailLabel}>Route Adherence</Text>
@@ -582,12 +582,12 @@ export default function VehicleTracking() {
                 </Text>
               </View>
 
-              <View style={styles.detailSection}>
+              {/* <View style={styles.detailSection}>
                 <Text style={styles.detailLabel}>Fuel Level</Text>
                 <Text style={styles.detailValue}>
                   {selectedVehicle.fuelLevel}%
                 </Text>
-              </View>
+              </View> */}
 
               <View style={styles.detailSection}>
                 <Text style={styles.detailLabel}>Status</Text>

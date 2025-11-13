@@ -298,11 +298,11 @@ export default function TransportTracking() {
         <Text style={styles.routeText}>
           {item.origin} to {item.destination}
         </Text>
-        <Text style={styles.cargoInfo}>
-          {item.cargoType} - {item.quantity.toLocaleString()}L
-        </Text>
+        {/* <Text style={styles.cargoInfo}>
+          {item.cargoType} - {item.quantity.toLocaleString()}
+        </Text> */}
       </View>
-
+      {/* 
       <View style={styles.progressContainer}>
         <View style={styles.progressBar}>
           <View
@@ -318,7 +318,7 @@ export default function TransportTracking() {
         <Text style={styles.progressText}>
           {item.progressPercentage}% Complete
         </Text>
-      </View>
+      </View> */}
 
       <View style={styles.timeInfo}>
         <View style={styles.timeRow}>
@@ -326,14 +326,14 @@ export default function TransportTracking() {
           <Text style={styles.timeValue}>{formatTime(item.departureTime)}</Text>
         </View>
         <View style={styles.timeRow}>
-          <Text style={styles.timeLabel}>ETA:</Text>
+          {/* <Text style={styles.timeLabel}>ETA:</Text>
           <Text style={styles.timeValue}>
             {calculateETA(item.estimatedArrival)}
-          </Text>
+          </Text> */}
         </View>
       </View>
 
-      <Text style={styles.locationText}>Location: {item.currentLocation}</Text>
+      {/* <Text style={styles.locationText}>Location: {item.currentLocation}</Text> */}
     </TouchableOpacity>
   );
 
@@ -367,8 +367,7 @@ export default function TransportTracking() {
 
   const summaryData = {
     active: summary?.active ?? derivedSummary.active,
-    filling:
-      summary?.filling ?? summary?.loading ?? derivedSummary.filling,
+    filling: summary?.filling ?? summary?.loading ?? derivedSummary.filling,
   };
 
   return (

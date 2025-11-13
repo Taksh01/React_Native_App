@@ -644,7 +644,7 @@ export default function MSOperations() {
               </Text>
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Pre Reading (Litres)</Text>
+              <Text style={styles.inputLabel}>Pre Reading</Text>
               <AppTextField
                 placeholder="Enter pre meter reading"
                 value={preReading}
@@ -680,7 +680,7 @@ export default function MSOperations() {
               </Text>
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Post Reading (Litres)</Text>
+              <Text style={styles.inputLabel}>Post Reading</Text>
               <AppTextField
                 placeholder="Enter post meter reading"
                 value={postReading}
