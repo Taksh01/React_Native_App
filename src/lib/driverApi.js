@@ -92,6 +92,7 @@ export const driverApi = {
     readingType,
     reading,
     confirmed,
+    photoBase64,
   }) => {
     const response = await fetch(
       `${CONFIG.API_BASE_URL}/driver/meter-reading/confirm`,
@@ -104,6 +105,8 @@ export const driverApi = {
           readingType, // 'pre' or 'post'
           reading,
           confirmed, // true or false
+          // optional base64 photo (string)
+          ...(photoBase64 ? { photoBase64 } : {}),
         }),
       }
     );

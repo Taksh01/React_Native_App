@@ -1,5 +1,9 @@
 import React from "react";
-import { Feather, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
+import {
+  Feather,
+  MaterialCommunityIcons,
+  FontAwesome5,
+} from "@expo/vector-icons";
 
 const ICON_MAP = {
   // Navigation / common UI
@@ -63,6 +67,7 @@ const ICON_MAP = {
   map: { lib: Feather, name: "map" },
   destination: { lib: Feather, name: "map-pin" },
   location: { lib: Feather, name: "crosshair" },
+  camera: { lib: Feather, name: "camera" },
 
   // Emergency alerts
   emergencyTyre: { lib: Feather, name: "slash" },
@@ -101,7 +106,9 @@ const DEFAULT_ICON = { lib: Feather, name: "circle" };
 export default function AppIcon({ icon, size = 18, color = "#1e293b", style }) {
   const entry = ICON_MAP[icon] || DEFAULT_ICON;
   const IconComponent = entry.lib;
-  return <IconComponent name={entry.name} size={size} color={color} style={style} />;
+  return (
+    <IconComponent name={entry.name} size={size} color={color} style={style} />
+  );
 }
 
 export function registerIcon(name, config) {

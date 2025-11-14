@@ -6,6 +6,8 @@ import {
   Alert,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../store/auth";
@@ -13,7 +15,9 @@ import { driverApi } from "../../lib/driverApi";
 import MapView from "../../components/driver/MapView";
 import AppIcon from "../../components/AppIcon";
 import AppButton from "../../components/AppButton";
+import logBase64 from "../../utils/logBase64";
 import { useThemedStyles } from "../../theme";
+import * as ImagePicker from "expo-image-picker";
 
 // Trip steps
 const TRIP_STEPS = {
@@ -56,6 +60,11 @@ const DEFAULT_READINGS_STATE = {
   msPostReading: null,
   dbsPreReading: null,
   dbsPostReading: null,
+  // store base64 photos for each reading
+  msPrePhotoBase64: null,
+  msPostPhotoBase64: null,
+  dbsPrePhotoBase64: null,
+  dbsPostPhotoBase64: null,
 };
 
 const createFallbackToken = (tripId = FALLBACK_TRIP_DATA.tripId) =>
@@ -320,6 +329,100 @@ export default function DriverDashboard({ navigation, route }) {
     ...DEFAULT_READINGS_STATE,
   }));
 
+  // Camera state
+  const [hasCameraPermission, setHasCameraPermission] = useState(null);
+  const [cameraContext, setCameraContext] = useState({
+    stationType: null,
+    readingType: null,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (mounted) setHasCameraPermission(status === "granted");
+      } catch (e) {
+        if (mounted) setHasCameraPermission(false);
+      }
+    })();
+    return () => (mounted = false);
+  }, []);
+
+  const handleOpenCamera = async (stationType, readingType) => {
+    setCameraContext({ stationType, readingType });
+    // prevent retake if already captured
+    const existingKey = `${stationType.toLowerCase()}${
+      readingType.charAt(0).toUpperCase() + readingType.slice(1)
+    }PhotoBase64`;
+    if (readingsState[existingKey]) {
+      Alert.alert(
+        "Photo already captured",
+        "You have already taken a photo for this reading."
+      );
+      return;
+    }
+    // Permission guard
+    if (hasCameraPermission === false) {
+      Alert.alert(
+        "Camera Permission Required",
+        "Please allow camera access in your device settings."
+      );
+      return;
+    }
+
+    try {
+      setLoading((p) => ({ ...p, readings: true }));
+      const result = await ImagePicker.launchCameraAsync({
+        base64: true,
+        quality: 0.6,
+      });
+
+      // Newer ImagePicker API: `canceled` boolean and `assets` array
+      if (result.canceled) {
+        // user cancelled
+        return;
+      }
+
+      const asset = result.assets && result.assets[0];
+      if (!asset) {
+        console.warn("ImagePicker returned no assets");
+        Alert.alert("Camera", "No image returned from camera.");
+        return;
+      }
+
+      if (asset.base64) {
+        const b64 = asset.base64;
+        setReadingsState((prev) => {
+          const key = `${stationType.toLowerCase()}${
+            readingType.charAt(0).toUpperCase() + readingType.slice(1)
+          }PhotoBase64`;
+          // Log a short preview to Metro terminal via helper
+          try {
+            logBase64(key, b64, 200);
+          } catch (logErr) {
+            console.warn(
+              "Failed to run base64 logger",
+              logErr?.message || logErr
+            );
+          }
+          return { ...prev, [key]: b64 };
+        });
+      } else {
+        console.warn("ImagePicker returned asset without base64.");
+        Alert.alert(
+          "Camera",
+          "Photo captured but base64 not available on this device."
+        );
+      }
+    } catch (e) {
+      console.warn("Camera launch failed", e?.message || e);
+      Alert.alert("Camera", "Failed to open camera.");
+    } finally {
+      setLoading((p) => ({ ...p, readings: false }));
+    }
+  };
+
   // Handle navigation from notification payload (non-intrusive)
   useEffect(() => {
     const params = route?.params;
@@ -532,6 +635,17 @@ export default function DriverDashboard({ navigation, route }) {
       ? readingsState.msPreReading
       : readingsState.dbsPreReading ?? readingsState.msPostReading ?? 0;
 
+    // Require photo before allowing confirmation
+    const photoKey = isMS ? "msPrePhotoBase64" : "dbsPrePhotoBase64";
+    if (!readingsState[photoKey]) {
+      Alert.alert(
+        "Photo Required",
+        "Please take a photo before confirming the pre reading.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     setLoading((prev) => ({ ...prev, readings: true }));
     try {
       if (token) {
@@ -541,6 +655,9 @@ export default function DriverDashboard({ navigation, route }) {
           readingType: "pre",
           reading: fallbackReading ?? 0,
           confirmed: true,
+          photoBase64: isMS
+            ? readingsState.msPrePhotoBase64
+            : readingsState.dbsPrePhotoBase64,
         });
       }
     } catch (error) {
@@ -605,6 +722,17 @@ export default function DriverDashboard({ navigation, route }) {
         readingsState.dbsPreReading ??
         readingsState.msPostReading;
 
+    // Require photo before allowing confirmation
+    const photoKey = isMS ? "msPostPhotoBase64" : "dbsPostPhotoBase64";
+    if (!readingsState[photoKey]) {
+      Alert.alert(
+        "Photo Required",
+        "Please take a photo before confirming the post reading.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     setLoading((prev) => ({ ...prev, readings: true }));
     try {
       if (token) {
@@ -614,6 +742,9 @@ export default function DriverDashboard({ navigation, route }) {
           readingType: "post",
           reading: readingValue ?? 0,
           confirmed: true,
+          photoBase64: isMS
+            ? readingsState.msPostPhotoBase64
+            : readingsState.dbsPostPhotoBase64,
         });
       }
     } catch (error) {
@@ -788,6 +919,49 @@ export default function DriverDashboard({ navigation, route }) {
                     paddingHorizontal: themeRef.current?.spacing(3) || 12,
                   }}
                 />
+                {/* Camera button: disabled after capture */}
+                {(() => {
+                  const preKey = isMS
+                    ? "msPrePhotoBase64"
+                    : "dbsPrePhotoBase64";
+                  const hasPhoto = !!readingsState[preKey];
+                  if (hasPhoto) {
+                    return (
+                      <View
+                        style={{
+                          justifyContent: "center",
+                          alignItems: "center",
+                          marginLeft: themeRef.current?.spacing(2) || 8,
+                          width: 44,
+                        }}
+                      >
+                        <AppIcon
+                          icon="camera"
+                          size={20}
+                          color={themeRef.current?.colors?.iconDark || "#333"}
+                          style={{ opacity: 0.35 }}
+                        />
+                      </View>
+                    );
+                  }
+                  return (
+                    <TouchableOpacity
+                      onPress={() => handleOpenCamera(stationType, "pre")}
+                      style={{
+                        justifyContent: "center",
+                        alignItems: "center",
+                        marginLeft: themeRef.current?.spacing(2) || 8,
+                        width: 44,
+                      }}
+                    >
+                      <AppIcon
+                        icon="camera"
+                        size={20}
+                        color={themeRef.current?.colors?.iconDark || "#333"}
+                      />
+                    </TouchableOpacity>
+                  );
+                })()}
               </View>
             ) : (
               <View style={styles.confirmedBadge}>
@@ -832,6 +1006,50 @@ export default function DriverDashboard({ navigation, route }) {
                         paddingHorizontal: themeRef.current?.spacing(3) || 12,
                       }}
                     />
+                    {(() => {
+                      const postKey = isMS
+                        ? "msPostPhotoBase64"
+                        : "dbsPostPhotoBase64";
+                      const hasPostPhoto = !!readingsState[postKey];
+                      if (hasPostPhoto) {
+                        return (
+                          <View
+                            style={{
+                              justifyContent: "center",
+                              alignItems: "center",
+                              marginLeft: themeRef.current?.spacing(2) || 8,
+                              width: 44,
+                            }}
+                          >
+                            <AppIcon
+                              icon="camera"
+                              size={20}
+                              color={
+                                themeRef.current?.colors?.iconDark || "#333"
+                              }
+                              style={{ opacity: 0.35 }}
+                            />
+                          </View>
+                        );
+                      }
+                      return (
+                        <TouchableOpacity
+                          onPress={() => handleOpenCamera(stationType, "post")}
+                          style={{
+                            justifyContent: "center",
+                            alignItems: "center",
+                            marginLeft: themeRef.current?.spacing(2) || 8,
+                            width: 44,
+                          }}
+                        >
+                          <AppIcon
+                            icon="camera"
+                            size={20}
+                            color={themeRef.current?.colors?.iconDark || "#333"}
+                          />
+                        </TouchableOpacity>
+                      );
+                    })()}
                   </View>
                 ) : (
                   <View style={styles.confirmedBadge}>
@@ -933,6 +1151,8 @@ export default function DriverDashboard({ navigation, route }) {
         {renderTripHeader()}
         {renderMainContent()}
       </ScrollView>
+
+      {/* Camera now uses expo-image-picker via `handleOpenCamera` */}
 
       {/* Emergency Button - Always Visible */}
       <AppButton

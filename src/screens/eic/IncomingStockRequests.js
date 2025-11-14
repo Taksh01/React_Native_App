@@ -578,7 +578,7 @@ export default function IncomingStockRequests() {
         </Text>
       </View> */}
 
-      <View style={styles.filterRow}>
+      {/* <View style={styles.filterRow}>
         <View style={styles.filterSection}>
           <Text style={styles.filterLabel}>Type</Text>
           <View style={styles.filterPillRow}>
@@ -603,7 +603,7 @@ export default function IncomingStockRequests() {
             )}
           </View>
         </View>
-      </View>
+      </View> */}
 
       <FlatList
         data={filteredRequests}
