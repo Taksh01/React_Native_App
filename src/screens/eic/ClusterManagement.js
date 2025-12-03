@@ -647,11 +647,11 @@ export default function ClusterManagement() {
                       {station.name || "Unnamed DBS"}
                     </Text>
                     <Text style={styles.dbsCardId}>{station.id}</Text>
-                    <Text style={styles.dbsCardCapacity}>
+                    {/* <Text style={styles.dbsCardCapacity}>
                       {station.capacity != null
                         ? `${station.capacity} scm`
                         : "No capacity"}
-                    </Text>
+                    </Text> */}
                   </View>
                   {canManageClusters && (
                     <TouchableOpacity
@@ -791,7 +791,7 @@ export default function ClusterManagement() {
                     />
                   </View>
                   <View style={styles.inputColumn}>
-                    <Text style={styles.fieldLabel}>Capacity (scm)</Text>
+                    {/* <Text style={styles.fieldLabel}>Capacity (scm)</Text> */}
                     <TextInput
                       style={styles.input}
                       value={station.capacity}

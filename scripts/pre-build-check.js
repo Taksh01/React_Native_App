@@ -59,7 +59,7 @@ try {
 
 // Check 5: node_modules exists
 if (!fs.existsSync('node_modules')) {
-  errors.push('❌ node_modules not found - run yarn install');
+  errors.push('❌ node_modules not found - run npm install');
 } else {
   console.log('✅ node_modules found');
 }
@@ -112,8 +112,8 @@ if (errors.length > 0) {
   process.exit(1);
 } else {
   console.log('\n✅ All checks passed! Ready to build.\n');
-  console.log('Run: yarn build:dev (for development build)');
-  console.log('  or: yarn build:preview (for preview build)');
-  console.log('  or: yarn build:prod (for production build)\n');
+  console.log('Run: npm run build:dev (for development build)');
+  console.log('  or: npm run build:preview (for preview build)');
+  console.log('  or: npm run build:prod (for production build)\n');
   process.exit(0);
 }

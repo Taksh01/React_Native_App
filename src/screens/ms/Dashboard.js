@@ -284,7 +284,7 @@ export default function MSDashboard() {
       </View>
       <View style={styles.summaryGrid}>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Filling</Text>
+          <Text style={styles.summaryLabel}>In Progress</Text>
           <Text style={styles.summaryValue}>{summaryCounts.FILLING}</Text>
         </View>
         <View style={styles.summaryCard}>

@@ -191,7 +191,7 @@ const _mock = {
           {
             id: "TRP-2024-003",
             route: "Mehsana DBS \u2190 Changodar MS",
-            status: "PENDING",
+            status: "DISPATCHED",
             driverName: "Priya Mehta",
             scheduledTime: new Date(
               Date.now() + 3 * 60 * 60 * 1000
@@ -464,7 +464,7 @@ const _mock = {
           {
             id: "SUR-TRP-003",
             route: "Surat DBS \u2190 Bharuch MS",
-            status: "PENDING",
+            status: "DISPATCHED",
             driverName: "Pritesh Vyas",
             scheduledTime: new Date(
               Date.now() + 4 * 60 * 60 * 1000
@@ -803,7 +803,7 @@ const _mock = {
           route: "Vastral MS \u2192 Mehsana DBS",
           product: "MS",
           quantity: 12000,
-          status: "SCHEDULED",
+          status: "DISPATCHED",
           scheduledTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           vehicleNumber: "GJ-01-AA-2211",
           driverName: "Ankit Shah",
@@ -857,7 +857,7 @@ const _mock = {
           route: "Vastral MS \u2192 Kalol DBS",
           product: "MS",
           quantity: 11000,
-          status: "SCHEDULED",
+          status: "DISPATCHED",
           scheduledTime: new Date(
             Date.now() + 4 * 60 * 60 * 1000
           ).toISOString(),
@@ -885,7 +885,7 @@ const _mock = {
           route: "Vastral MS \u2192 Nadiad DBS",
           product: "Premium Petrol",
           quantity: 9500,
-          status: "SCHEDULED",
+          status: "COMPLETED",
           scheduledTime: new Date(
             Date.now() + 6 * 60 * 60 * 1000
           ).toISOString(),

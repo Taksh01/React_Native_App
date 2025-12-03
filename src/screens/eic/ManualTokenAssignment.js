@@ -403,10 +403,10 @@ export default function ManualTokenAssignment() {
                 Customer:{" "}
                 {token.customerName || token.customerId || "FDODO Customer"}
               </Text>
-              <Text style={styles.tokenMeta}>
+              {/* <Text style={styles.tokenMeta}>
                 MS Station: {token.msStation || "-"}
                 {token.msSlot ? ` (${token.msSlot})` : ""}
-              </Text>
+              </Text> */}
               {/* <Text style={styles.tokenMeta}>
                 Product: {token.product} {String(token.quantity || "")}{" "}
                 {token.unit}

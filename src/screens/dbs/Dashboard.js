@@ -19,7 +19,7 @@ import { useThemedStyles } from "../../theme";
 
 const STATUS_COLORS = {
   DISPATCHED: "#2563eb",
-  FILLING: "#38bdf8",
+  DECANTING: "#38bdf8",
   COMPLETED: "#10b981",
 };
 
@@ -244,7 +244,7 @@ export default function DBSDashboard() {
           <Text style={styles.summaryValue}>{summary.pending}</Text>
         </View>
         <View style={styles.summaryChip}>
-          <Text style={styles.summaryLabel}>Filling</Text>
+          <Text style={styles.summaryLabel}>Decanting</Text>
           <Text style={styles.summaryValue}>{summary.inProgress}</Text>
         </View>
         <View style={styles.summaryChip}>

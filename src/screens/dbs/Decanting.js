@@ -660,13 +660,13 @@ export default function Decanting() {
               <View style={styles.metricsContainer}>
                 <Text style={styles.metricsTitle}>Pre-Decant Readings</Text>
                 <Text style={styles.metricItem}>
-                  Pressure: {pre.data.pressure} PSI
+                  Pressure: {pre.data.pressure}
                 </Text>
                 <Text style={styles.metricItem}>
-                  Flow Rate: {pre.data.flow} L/min
+                  Flow Rate: {pre.data.flow}
                 </Text>
                 <Text style={styles.metricItem}>
-                  MFM Reading: {pre.data.mfm} L
+                  MFM Reading: {pre.data.mfm}
                 </Text>
               </View>
             )}
@@ -711,13 +711,13 @@ export default function Decanting() {
                 <View style={styles.metricsContainer}>
                   <Text style={styles.metricsTitle}>Post-Decant Readings</Text>
                   <Text style={styles.metricItem}>
-                    Pressure: {postData.pressure} PSI
+                    Pressure: {postData.pressure}
                   </Text>
                   <Text style={styles.metricItem}>
-                    Flow Rate: {postData.flow} L/min
+                    Flow Rate: {postData.flow}
                   </Text>
                   <Text style={styles.metricItem}>
-                    MFM Reading: {postData.mfm} L
+                    MFM Reading: {postData.mfm}
                   </Text>
                 </View>
                 <View style={styles.successMessage}>

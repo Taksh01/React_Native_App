@@ -7,12 +7,12 @@ const explicitBaseUrl =
   Constants.manifestExtra?.apiBaseUrl;
 
 const emulatorBaseUrl = Platform.select({
-  ios: "http://127.0.0.1:5000",
-  android: "http://10.0.2.2:5000",
+  ios: "http:// 192.168.1.167:8000",
+  android: "http:// 192.168.1.167:8000",
   default: undefined,
 });
 
-const defaultLocalNetworkBaseUrl = "http://192.168.1.167:5000";
+const defaultLocalNetworkBaseUrl = "http://192.168.1.167:8000";
 
 const resolvedBaseUrl =
   explicitBaseUrl || emulatorBaseUrl || defaultLocalNetworkBaseUrl;

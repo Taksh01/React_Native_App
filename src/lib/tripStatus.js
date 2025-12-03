@@ -16,10 +16,11 @@ export const STATUS_GROUPS = {
     "ASSIGNED",
     "READY",
   ],
-  FILLING: [
+  DECANTING: [
     "IN_PROGRESS",
     "IN PROGRESS",
     "FILLING",
+    "DECANTING",
     "LOADING",
     "ARRIVED",
     "EN_ROUTE",
@@ -40,7 +41,7 @@ export const STATUS_GROUPS = {
 
 export const STATUS_LABELS = {
   DISPATCHED: "Dispatched",
-  FILLING: "Filling",
+  DECANTING: "Decanting",
   COMPLETED: "Completed",
 };
 
@@ -51,8 +52,8 @@ export const deriveStatusCategory = (status) => {
   if (STATUS_GROUPS.COMPLETED.some((value) => normalized.includes(value))) {
     return "COMPLETED";
   }
-  if (STATUS_GROUPS.FILLING.some((value) => normalized.includes(value))) {
-    return "FILLING";
+  if (STATUS_GROUPS.DECANTING.some((value) => normalized.includes(value))) {
+    return "DECANTING";
   }
   return "DISPATCHED";
 };

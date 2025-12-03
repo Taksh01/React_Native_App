@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -7,7 +7,12 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
+  Modal,
 } from "react-native";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+} from "@react-native-community/datetimepicker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { GTS } from "../../api/client";
@@ -30,6 +35,85 @@ export default function StockTransfersView({
   const typeFilters = (
     transferTypeFilters?.length ? transferTypeFilters : [normalizedDirection]
   ).map((value) => value.toUpperCase());
+
+  // Date filtering state
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(new Date());
+  const [appliedStartDate, setAppliedStartDate] = useState(new Date());
+  const [appliedEndDate, setAppliedEndDate] = useState(new Date());
+  const [pickerMode, setPickerMode] = useState(null); // "start" | "end" | null
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [tempDate, setTempDate] = useState(new Date());
+  const [currentDateType, setCurrentDateType] = useState(null); // "start" | "end"
+
+  const isIOS = Platform.OS === "ios";
+
+  const formatDateDisplay = (d) =>
+    d?.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }) ?? "";
+
+  const applyDateSelection = (selected, type) => {
+    if (type === "start") {
+      setStartDate(selected);
+    } else {
+      setEndDate(selected);
+    }
+  };
+
+  const openDatePicker = (type) => {
+    const baseDate = type === "start" ? startDate : endDate;
+
+    if (!isIOS) {
+      DateTimePickerAndroid.open({
+        value: baseDate,
+        mode: "date",
+        onChange: (event, date) => {
+          if (event.type === "dismissed" || !date) return;
+          applyDateSelection(date, type);
+        },
+      });
+      return;
+    }
+
+    setPickerMode("date");
+    setCurrentDateType(type);
+    setTempDate(baseDate);
+    setPickerVisible(true);
+  };
+
+  const onTempDateChange = (_event, date) => {
+    if (date) setTempDate(date);
+  };
+
+  const onPickerDone = () => {
+    if (currentDateType) {
+      applyDateSelection(tempDate, currentDateType);
+    }
+    setPickerVisible(false);
+    setPickerMode(null);
+    setCurrentDateType(null);
+  };
+
+  const onPickerCancel = () => {
+    setPickerVisible(false);
+    setPickerMode(null);
+    setCurrentDateType(null);
+  };
+
+  const applyDateFilter = () => {
+    setAppliedStartDate(startDate);
+    setAppliedEndDate(endDate);
+  };
+
+  const hasDateChanges = () => {
+    return (
+      startDate.toDateString() !== appliedStartDate.toDateString() ||
+      endDate.toDateString() !== appliedEndDate.toDateString()
+    );
+  };
 
   const styles = useThemedStyles((theme) => {
     themeRef.current = theme;
@@ -250,6 +334,131 @@ export default function StockTransfersView({
         textAlign: "center",
         marginTop: 6,
       },
+      dateFilterContainer: {
+        backgroundColor: "#ffffff",
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: "#e2e8f0",
+      },
+      dateFilterTitle: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#1e293b",
+        marginBottom: 12,
+      },
+      dateRow: {
+        flexDirection: "row",
+        gap: 8,
+        marginBottom: 12,
+        justifyContent: "flex-start",
+        alignItems: "center",
+      },
+      filterActions: {
+        flexDirection: "row",
+        justifyContent: "flex-end",
+      },
+      applyButton: {
+        backgroundColor: "#1d4ed8",
+        paddingHorizontal: 20,
+        borderRadius: 8,
+        minWidth: 90,
+        alignItems: "center",
+        justifyContent: "center",
+        height: 40,
+      },
+      applyButtonDisabled: {
+        backgroundColor: "#94a3b8",
+      },
+      applyButtonText: {
+        color: "#ffffff",
+        fontSize: 15,
+        fontWeight: "600",
+      },
+      applyButtonTextDisabled: {
+        color: "#e2e8f0",
+      },
+      dateField: {
+        borderRadius: 8,
+        backgroundColor: "#f8fafc",
+        borderWidth: 1,
+        borderColor: "#e2e8f0",
+        alignSelf: "flex-start",
+        minWidth: 130,
+        maxWidth: 150,
+      },
+      dateFieldInner: {
+        height: 40,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        justifyContent: "center",
+        alignItems: "flex-start",
+        minWidth: 0,
+      },
+      dateFieldLabel: {
+        fontSize: 12,
+        color: "#64748b",
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+      },
+      dateFieldText: {
+        fontSize: 16,
+        color: "#1e293b",
+        fontWeight: "500",
+      },
+      dateFieldPlaceholder: {
+        fontSize: 16,
+        color: "#94a3b8",
+        fontWeight: "500",
+      },
+      modalBackdrop: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.35)",
+        justifyContent: "flex-end",
+      },
+      modalSheet: {
+        backgroundColor: "#ffffff",
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        padding: 16,
+      },
+      modalHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 8,
+      },
+      modalTitle: {
+        fontSize: 16,
+        fontWeight: "700",
+        color: "#1e293b",
+      },
+      modalActions: {
+        flexDirection: "row",
+        gap: 8,
+      },
+      actionBtn: {
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#e2e8f0",
+      },
+      actionPrimary: {
+        backgroundColor: "#1d4ed8",
+        borderColor: "#1d4ed8",
+      },
+      actionText: {
+        color: "#1e293b",
+        fontWeight: "500",
+      },
+      actionTextPrimary: {
+        color: "#ffffff",
+        fontWeight: "600",
+      },
+      pickerWrap: {
+        paddingVertical: 8,
+      },
     });
   });
 
@@ -260,8 +469,17 @@ export default function StockTransfersView({
     refetch,
     error,
   } = useQuery({
-    queryKey: ["stockTransfers", dbsId],
-    queryFn: () => GTS.getStockTransfers(dbsId),
+    queryKey: [
+      "stockTransfers",
+      dbsId,
+      appliedStartDate.toDateString(),
+      appliedEndDate.toDateString(),
+    ],
+    queryFn: () =>
+      GTS.getStockTransfers(dbsId, {
+        startDate: appliedStartDate.toISOString(),
+        endDate: appliedEndDate.toISOString(),
+      }),
     enabled: Boolean(dbsId),
     refetchInterval: 60000,
     refetchIntervalInBackground: false,
@@ -362,25 +580,25 @@ export default function StockTransfersView({
 
         <View style={styles.timeInfo}>
           <View style={styles.timeRow}>
-            <Text style={styles.timeLabel}>Initiated:</Text>
+            <Text style={styles.timeLabel}>Completed:</Text>
             <Text style={styles.timeValue}>{formatDate(item.initiatedAt)}</Text>
           </View>
-          {item.completedAt ? (
+          {/* {item.completedAt ? (
             <View style={styles.timeRow}>
               <Text style={styles.timeLabel}>Completed:</Text>
               <Text style={styles.timeValue}>
                 {formatDate(item.completedAt)}
               </Text>
             </View>
-          ) : null}
-          {item.estimatedCompletion && !item.completedAt ? (
+          ) : null} */}
+          {/* {item.estimatedCompletion && !item.completedAt ? (
             <View style={styles.timeRow}>
               <Text style={styles.timeLabel}>Expected:</Text>
               <Text style={styles.timeValue}>
                 {formatDate(item.estimatedCompletion)}
               </Text>
             </View>
-          ) : null}
+          ) : null} */}
         </View>
         {/* 
         {item.notes ? (
@@ -424,8 +642,92 @@ export default function StockTransfersView({
   }
 
   const allTransfers = transfersData?.transfers || [];
-  const transfers = allTransfers.filter((transfer) =>
-    typeFilters.includes((transfer.type ?? "").toString().toUpperCase())
+  const transfers = allTransfers.filter((transfer) => {
+    // Filter by type
+    const matchesType = typeFilters.includes(
+      (transfer.type ?? "").toString().toUpperCase()
+    );
+
+    // Filter by date range
+    const transferDate = new Date(
+      transfer.initiatedAt || transfer.createdAt || transfer.completedAt
+    );
+    const startOfDay = new Date(
+      appliedStartDate.getFullYear(),
+      appliedStartDate.getMonth(),
+      appliedStartDate.getDate()
+    );
+    const endOfDay = new Date(
+      appliedEndDate.getFullYear(),
+      appliedEndDate.getMonth(),
+      appliedEndDate.getDate(),
+      23,
+      59,
+      59
+    );
+    const matchesDate = transferDate >= startOfDay && transferDate <= endOfDay;
+
+    return matchesType && matchesDate;
+  });
+
+  const renderDateFilter = () => (
+    <View style={styles.dateFilterContainer}>
+      <Text style={styles.dateFilterTitle}>Filter by Date Range</Text>
+      <View style={styles.dateRow}>
+        <TouchableOpacity
+          style={styles.dateField}
+          onPress={() => openDatePicker("start")}
+          activeOpacity={0.7}
+        >
+          <View style={styles.dateFieldInner}>
+            {startDate.toDateString() === new Date().toDateString() &&
+            appliedStartDate.toDateString() === new Date().toDateString() ? (
+              <Text style={styles.dateFieldPlaceholder}>Start Date</Text>
+            ) : (
+              <Text style={styles.dateFieldText}>
+                {formatDateDisplay(startDate)}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.dateField}
+          onPress={() => openDatePicker("end")}
+          activeOpacity={0.7}
+        >
+          <View style={styles.dateFieldInner}>
+            {endDate.toDateString() === new Date().toDateString() &&
+            appliedEndDate.toDateString() === new Date().toDateString() ? (
+              <Text style={styles.dateFieldPlaceholder}>End Date</Text>
+            ) : (
+              <Text style={styles.dateFieldText}>
+                {formatDateDisplay(endDate)}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.applyButton,
+            !hasDateChanges() && styles.applyButtonDisabled,
+          ]}
+          onPress={applyDateFilter}
+          disabled={!hasDateChanges()}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.applyButtonText,
+              !hasDateChanges() && styles.applyButtonTextDisabled,
+            ]}
+          >
+            Apply
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
   const summary = transfersData?.summary || {};
 
@@ -464,7 +766,8 @@ export default function StockTransfersView({
       {headerComponent ? (
         <View style={styles.headerExtras}>{headerComponent}</View>
       ) : null}
-      <View style={styles.summaryContainer}>
+      {dbsId && renderDateFilter()}
+      {/* <View style={styles.summaryContainer}>
         <View style={styles.summaryCard}>
           <View style={styles.summaryIcon}>
             <AppIcon icon="summaryTotal" size={16} color="#1e293b" />
@@ -488,7 +791,7 @@ export default function StockTransfersView({
           <Text style={styles.summaryNumber}>{summaryData.completed ?? 0}</Text>
           <Text style={styles.summaryLabel}>Completed</Text>
         </View>
-      </View>
+      </View> */}
 
       <FlatList
         data={transfers}
@@ -517,6 +820,48 @@ export default function StockTransfersView({
           )
         }
       />
+
+      {isIOS && (
+        <Modal
+          visible={pickerVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={onPickerCancel}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  Select {currentDateType === "start" ? "Start" : "End"} Date
+                </Text>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={onPickerCancel}
+                  >
+                    <Text style={styles.actionText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionPrimary]}
+                    onPress={onPickerDone}
+                  >
+                    <Text style={styles.actionTextPrimary}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.pickerWrap}>
+                <DateTimePicker
+                  value={tempDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={onTempDateChange}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }

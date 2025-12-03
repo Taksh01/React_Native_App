@@ -511,7 +511,7 @@ export default function IncomingStockRequests() {
         </View> */}
       </View>
 
-      <View style={styles.badgeRow}>
+      {/* <View style={styles.badgeRow}>
         <View
           style={[
             styles.badge,
@@ -533,7 +533,7 @@ export default function IncomingStockRequests() {
         >
           <Text style={styles.badgeText}>{item.type}</Text>
         </View>
-      </View>
+      </View> */}
 
       <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>DBS Station</Text>
