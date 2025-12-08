@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useThemedStyles } from "../../theme";
-import { mockVehicleQueue, mockBays } from "../../api/mockVehicleQueue";
+// Removed mock import - will use real API or fallback data
 import AppIcon from "../../components/AppIcon";
 
 const BayCard = ({ bay, onAssign, styles }) => {
@@ -118,8 +118,8 @@ const VehicleCard = ({ vehicle, onAssign, styles }) => {
 };
 
 export default function VehicleQueue() {
-  const [vehicles, setVehicles] = useState(mockVehicleQueue);
-  const [bays, setBays] = useState(mockBays);
+  const [vehicles, setVehicles] = useState([]);
+  const [bays, setBays] = useState([]);
 
   const styles = useThemedStyles((theme) =>
     StyleSheet.create({
@@ -311,13 +311,18 @@ export default function VehicleQueue() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       <View style={styles.baySection}>
         <Text style={styles.sectionTitle}>Bay Status</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.bayContainer}>
             {bays.map((bay) => (
-              <BayCard key={bay.bayId} bay={bay} onAssign={handleBayAssign} styles={styles} />
+              <BayCard
+                key={bay.bayId}
+                bay={bay}
+                onAssign={handleBayAssign}
+                styles={styles}
+              />
             ))}
           </View>
         </ScrollView>
@@ -331,7 +336,11 @@ export default function VehicleQueue() {
           data={vehicles}
           keyExtractor={(item) => item.vehicleId}
           renderItem={({ item }) => (
-            <VehicleCard vehicle={item} onAssign={handleVehicleAssign} styles={styles} />
+            <VehicleCard
+              vehicle={item}
+              onAssign={handleVehicleAssign}
+              styles={styles}
+            />
           )}
           showsVerticalScrollIndicator={false}
         />

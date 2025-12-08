@@ -11,21 +11,22 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { GTS } from "../../api/client";
+import { apiGetNetworkOverview } from "../../lib/eicApi";
 import AppIcon from "../../components/AppIcon";
 import AppButton from "../../components/AppButton";
 import { useThemedStyles } from "../../theme";
 
 const getStatusColors = (statusRaw) => {
-  const s = (statusRaw || "SCHEDULED").toUpperCase();
+  const s = (statusRaw || "PENDING").toUpperCase();
   const map = {
-    SCHEDULED: { fg: "#1f2937", bg: "#e5e7eb" },
-    EN_ROUTE: { fg: "#065f46", bg: "#d1fae5" },
-    DELAYED: { fg: "#78350f", bg: "#ffedd5" },
-    COMPLETED: { fg: "#1e3a8a", bg: "#dbeafe" },
-    CANCELLED: { fg: "#7f1d1d", bg: "#fee2e2" },
+    PENDING: { fg: "#1f2937", bg: "#e5e7eb" }, // Gray
+    AT_MS: { fg: "#1e40af", bg: "#dbeafe" }, // Blue
+    IN_TRANSIT: { fg: "#065f46", bg: "#d1fae5" }, // Green
+    AT_DBS: { fg: "#9a3412", bg: "#ffedd5" }, // Orange
+    COMPLETED: { fg: "#1e3a8a", bg: "#e0e7ff" }, // Indigo
+    CANCELLED: { fg: "#7f1d1d", bg: "#fee2e2" }, // Red
   };
-  return map[s] || map.SCHEDULED;
+  return map[s] || map.PENDING;
 };
 
 const formatDate = (value) => {
@@ -56,27 +57,29 @@ const nextTrips = (trips = [], limit = 3) =>
     )
     .slice(0, limit);
 
-const EXCLUDED_DBS_BY_MS = {
-  "MS-14": new Set(["DBS-09", "DBS-15"]),
-  "Sanand MS": new Set(["DBS-09", "DBS-15"]),
-  "MS-18": new Set(["DBS-09"]),
-  "Naroda MS": new Set(["DBS-09"]),
-};
 
-const shouldExcludeTrip = (ms, trip) => {
-  if (!trip) return true;
-  const blacklist =
-    EXCLUDED_DBS_BY_MS[ms?.msId] || EXCLUDED_DBS_BY_MS[ms?.msName];
-  if (!blacklist) {
-    return false;
-  }
-  return blacklist.has(trip.dbsId);
-};
 
 const groupByDbs = (ms, dbsLookup) => {
   const grouped = new Map();
+
+  // 1. Add static connections from dbsLookup (where dbs.msId matches ms.msId)
+  dbsLookup.forEach((dbs) => {
+    // Check for direct ID match or Name match if IDs are mixed
+    if (
+      (dbs.msId && dbs.msId === ms.msId) ||
+      (dbs.msName && dbs.msName === ms.msName)
+    ) {
+      const key = dbs.dbsId;
+      grouped.set(key, {
+        dbsId: dbs.dbsId,
+        dbsName: dbs.dbsName,
+        trips: [],
+      });
+    }
+  });
+
+  // 2. Add dynamic connections from trips
   (ms.trips || [])
-    .filter((trip) => !shouldExcludeTrip(ms, trip))
     .forEach((trip, idx) => {
       const key = trip.dbsId || `${ms.msId}-DBS-${idx}`;
       if (!grouped.has(key)) {
@@ -501,9 +504,11 @@ export default function NetworkDashboard() {
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["networkOverview"],
-    queryFn: () => GTS.getNetworkOverview(),
+    queryFn: () => apiGetNetworkOverview(),
     refetchInterval: 60000,
   });
+
+
 
   const dbsLookup = useMemo(() => {
     const map = new Map();
@@ -629,7 +634,7 @@ export default function NetworkDashboard() {
                           { color: fg, backgroundColor: bg },
                         ]}
                       >
-                        {(item.status || "Scheduled").toUpperCase()}
+                        {(item.status || "Pending").toUpperCase()}
                       </Text>
                     </View>
 

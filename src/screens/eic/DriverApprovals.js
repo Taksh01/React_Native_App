@@ -1,6 +1,5 @@
 import React, {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   useRef,
@@ -21,7 +20,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { GTS } from "../../api/client";
+import {
+  apiGetPendingDrivers,
+  apiApproveDriver,
+  apiRejectDriver,
+} from "../../lib/eicApi";
 import { useAuth } from "../../store/auth";
 import { useThemedStyles } from "../../theme";
 import AppSwitch from "../../components/AppSwitch";
@@ -46,7 +49,7 @@ export default function DriverApprovals() {
   const [rejectionNotes, setRejectionNotes] = useState("");
 
   const queryClient = useQueryClient();
-  const { user, updateUserPermissions } = useAuth();
+  const { user } = useAuth();
   const themeRef = useRef(null);
 
   const styles = useThemedStyles((theme) => {
@@ -369,25 +372,8 @@ export default function DriverApprovals() {
     });
   });
 
-  const {
-    data: permissionData,
-    refetch: refetchPermissions,
-    isFetching: isPermissionsFetching,
-  } = useQuery({
-    queryKey: ["eicPermissions", user?.id],
-    queryFn: () => GTS.getEICPermissions(user?.id),
-    enabled: !!user?.id,
-    staleTime: 60 * 1000,
-  });
-
-  useEffect(() => {
-    if (permissionData) {
-      updateUserPermissions(permissionData);
-    }
-  }, [permissionData, updateUserPermissions]);
-
-  const effectivePermissions = permissionData || user?.permissions || {};
-  const canManageDrivers = true; // Temporarily enabled for testing
+  // Use permissions directly from auth store (received during login)
+  const canManageDrivers = user?.permissions?.can_manage_drivers ?? false;
 
   const {
     data: pendingData,
@@ -397,7 +383,7 @@ export default function DriverApprovals() {
     error,
   } = useQuery({
     queryKey: ["pendingDrivers"],
-    queryFn: () => GTS.getPendingDrivers(),
+    queryFn: () => apiGetPendingDrivers(),
     staleTime: 30 * 1000,
   });
 
@@ -411,7 +397,7 @@ export default function DriverApprovals() {
   );
 
   const approveMutation = useMutation({
-    mutationFn: ({ driverId, payload }) => GTS.approveDriver(driverId, payload),
+    mutationFn: ({ driverId, payload }) => apiApproveDriver(driverId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["pendingDrivers"]);
       setShowApproveModal(false);
@@ -421,7 +407,7 @@ export default function DriverApprovals() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: ({ driverId, payload }) => GTS.rejectDriver(driverId, payload),
+    mutationFn: ({ driverId, payload }) => apiRejectDriver(driverId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["pendingDrivers"]);
       setShowRejectModal(false);
@@ -432,12 +418,8 @@ export default function DriverApprovals() {
   });
 
   const handleRefresh = useCallback(() => {
-    const tasks = [refetch()];
-    if (user?.id) {
-      tasks.push(refetchPermissions());
-    }
-    Promise.all(tasks).catch(() => undefined);
-  }, [refetch, refetchPermissions, user?.id]);
+    refetch().catch(() => undefined);
+  }, [refetch]);
 
   const openApproveModal = useCallback(
     (driver) => {
@@ -464,8 +446,9 @@ export default function DriverApprovals() {
         .filter(Boolean) || [];
 
     approveMutation.mutate({
-      driverId: selectedDriver.id,
+      driverId: selectedDriver.shiftId,
       payload: {
+        driverId: selectedDriver.shiftId,
         userId: user?.id,
         shiftStart: approvalForm.shiftStart,
         shiftEnd: approvalForm.shiftEnd,
@@ -484,8 +467,9 @@ export default function DriverApprovals() {
       return;
     }
     rejectMutation.mutate({
-      driverId: selectedDriver.id,
+      driverId: selectedDriver.shiftId,
       payload: {
+        driverId: selectedDriver.shiftId,
         userId: user?.id,
         reason: rejectionReason.trim(),
         notes: rejectionNotes.trim(),
@@ -518,6 +502,22 @@ export default function DriverApprovals() {
       <View style={styles.cardHeader}>
         <Text style={styles.driverName}>{item.name}</Text>
         <Text style={styles.driverId}>{item.id}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>Shift ID</Text>
+        <Text style={styles.rowValue}>#{item.shiftId}</Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>Shift Date</Text>
+        <Text style={styles.rowValue}>{item.shiftDate}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>Vehicle</Text>
+        <Text style={styles.rowValue}>
+          {item.vehicleNumber} (Capacity: {item.vehicleCapacity})
+        </Text>
       </View>
 
       <View style={styles.row}>
@@ -617,7 +617,7 @@ export default function DriverApprovals() {
         renderItem={renderDriverCard}
         refreshControl={
           <RefreshControl
-            refreshing={isFetching || isPermissionsFetching}
+            refreshing={isFetching}
             onRefresh={handleRefresh}
           />
         }
@@ -637,162 +637,43 @@ export default function DriverApprovals() {
     <Modal
       visible={showApproveModal}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={() => setShowApproveModal(false)}
     >
       <View style={styles.modalOverlay}>
-        <KeyboardAvoidingView
-          style={styles.kav}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
-        >
-          <View style={styles.modalCard}>
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled
-              contentContainerStyle={[styles.modalInner, { paddingBottom: 32 }]}
-            >
-              <Text style={styles.modalTitle}>Approve driver</Text>
-              <Text style={styles.modalSubtitle}>
-                Validate license, assign shift, confirm training before
-                activating the driver.
-              </Text>
+        <View style={styles.modalCard}>
+          <View style={styles.modalInner}>
+            <Text style={styles.modalTitle}>Approve driver</Text>
+            <Text style={styles.modalSubtitle}>
+              Please check all valid documents before approving. Ex: License, Training , Assigned shift
+            </Text>
 
-              <View style={styles.formGroupRow}>
-                <View style={styles.formColumn}>
-                  <Text style={styles.inputLabel}>Shift start</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={approvalForm.shiftStart}
-                    placeholder="08:00"
-                    onChangeText={(value) =>
-                      setApprovalForm((prev) => ({
-                        ...prev,
-                        shiftStart: value,
-                      }))
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowApproveModal(false)}
+                disabled={approveMutation.isPending}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={handleApprovalSubmit}
+                disabled={approveMutation.isPending}
+              >
+                {approveMutation.isPending ? (
+                  <ActivityIndicator
+                    color={
+                      themeRef.current?.colors?.surfaceElevated || "#ffffff"
                     }
                   />
-                </View>
-                <View style={styles.formColumn}>
-                  <Text style={styles.inputLabel}>Shift end</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={approvalForm.shiftEnd}
-                    placeholder="16:00"
-                    onChangeText={(value) =>
-                      setApprovalForm((prev) => ({ ...prev, shiftEnd: value }))
-                    }
-                  />
-                </View>
-              </View>
-
-              <View style={styles.toggleRow}>
-                <Text style={styles.toggleLabel}>License verified</Text>
-                <AppSwitch
-                  value={approvalForm.licenseVerified}
-                  onValueChange={(value) =>
-                    setApprovalForm((prev) => ({
-                      ...prev,
-                      licenseVerified: value,
-                    }))
-                  }
-                />
-              </View>
-              <View style={styles.toggleRow}>
-                <Text style={styles.toggleLabel}>Training verified</Text>
-                <AppSwitch
-                  value={approvalForm.trainingVerified}
-                  onValueChange={(value) =>
-                    setApprovalForm((prev) => ({
-                      ...prev,
-                      trainingVerified: value,
-                    }))
-                  }
-                />
-              </View>
-              <View style={styles.toggleRow}>
-                <Text style={styles.toggleLabel}>Training completed</Text>
-                <AppSwitch
-                  value={approvalForm.trainingCompleted}
-                  onValueChange={(value) =>
-                    setApprovalForm((prev) => ({
-                      ...prev,
-                      trainingCompleted: value,
-                    }))
-                  }
-                />
-              </View>
-              <View style={styles.toggleRow}>
-                <Text style={styles.toggleLabel}>Shift assigned</Text>
-                <AppSwitch
-                  value={approvalForm.shiftAssigned}
-                  onValueChange={(value) =>
-                    setApprovalForm((prev) => ({
-                      ...prev,
-                      shiftAssigned: value,
-                    }))
-                  }
-                />
-              </View>
-
-              {/* <View style={styles.formGroup}>
-                <Text style={styles.inputLabel}>
-                  Training modules (comma separated)
-                </Text>
-                <TextInput
-                  style={styles.input}
-                  value={approvalForm.trainingModules}
-                  onChangeText={(value) =>
-                    setApprovalForm((prev) => ({
-                      ...prev,
-                      trainingModules: value,
-                    }))
-                  }
-                  placeholder="Hazmat Handling, Emergency Response"
-                />
-              </View> */}
-
-              {/* <View style={styles.formGroup}>
-                <Text style={styles.inputLabel}>Notes</Text>
-                <TextInput
-                  style={[styles.input, styles.notesInput]}
-                  value={approvalForm.notes}
-                  onChangeText={(value) =>
-                    setApprovalForm((prev) => ({ ...prev, notes: value }))
-                  }
-                  multiline
-                  numberOfLines={4}
-                  placeholder="Add any remarks for dispatch or compliance teams"
-                />
-              </View> */}
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => setShowApproveModal(false)}
-                  disabled={approveMutation.isPending}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.confirmButton}
-                  onPress={handleApprovalSubmit}
-                  disabled={approveMutation.isPending}
-                >
-                  {approveMutation.isPending ? (
-                    <ActivityIndicator
-                      color={
-                        themeRef.current?.colors?.surfaceElevated || "#ffffff"
-                      }
-                    />
-                  ) : (
-                    <Text style={styles.confirmButtonText}>Approve</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
+                ) : (
+                  <Text style={styles.confirmButtonText}>Approve</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </View>
     </Modal>
   );

@@ -184,7 +184,7 @@ const DrawerNavigator = memo(function DrawerNavigator() {
           ),
         }}
       />
-      <Drawer.Screen
+      {/* <Drawer.Screen
         name="VehicleTracking"
         component={VehicleTracking}
         options={{
@@ -193,7 +193,7 @@ const DrawerNavigator = memo(function DrawerNavigator() {
             <AppIcon icon="vehicleTracking" size={18} color={color} />
           ),
         }}
-      />
+      /> */}
       {/* <Drawer.Screen
         name="VehicleQueue"
         component={VehicleQueue}
@@ -234,7 +234,7 @@ const DrawerNavigator = memo(function DrawerNavigator() {
           ),
         }}
       /> */}
-      <Drawer.Screen
+      {/* <Drawer.Screen
         name="ManualTokens"
         component={ManualTokenAssignment}
         options={{
@@ -243,7 +243,7 @@ const DrawerNavigator = memo(function DrawerNavigator() {
             <AppIcon icon="manualTokens" size={18} color={color} />
           ),
         }}
-      />
+      /> */}
       <Drawer.Screen
         name="Settings"
         component={SettingsScreen}
@@ -338,7 +338,7 @@ export default function EICNavigator() {
   }
 
   // Fallback to stack navigator for Expo Go
-  console.log("Using stack navigator (Expo Go mode)");
+
   return <StackNavigator />;
 }
 

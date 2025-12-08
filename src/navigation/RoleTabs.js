@@ -4,18 +4,15 @@ import { useAuth } from "../store/auth";
 import NotificationService from "../services/NotificationService";
 import AppIcon from "../components/AppIcon";
 
-// Import EIC Compatible Navigator
+// Import Compatible Navigators (Drawer in EAS, Stack/Tabs in Expo Go)
 import EICNavigator from "./EICNavigator";
+import DBSNavigator from "./DBSNavigator";
 import CustomerNavigator from "./CustomerNavigator";
 
 // Screens (make sure these paths exist in your project)
 import MSOperations from "../screens/ms/MSOperations";
 import MSDashboard from "../screens/ms/Dashboard";
 import MsStockTransfers from "../screens/ms/StockTransfers";
-import Decanting from "../screens/dbs/Decanting";
-import ManualRequest from "../screens/dbs/ManualRequest";
-import DBSDashboard from "../screens/dbs/Dashboard";
-import DbsStockTransfers from "../screens/dbs/StockTransfers";
 import TripHistory from "../screens/driver/TripHistory";
 import DriverDashboard from "../screens/driver/DriverDashboard";
 import EmergencyAlert from "../screens/driver/EmergencyAlert";
@@ -24,7 +21,7 @@ import FdodoNavigator from "./FdodoNavigator";
 
 const Tab = createBottomTabNavigator();
 
-export default function RoleTabs({ navigation }) {
+export default function RoleTabs({ navigation, route }) {
   const { user } = useAuth();
   const role = user?.role;
 
@@ -79,6 +76,30 @@ export default function RoleTabs({ navigation }) {
           stationId: last.stationId,
         });
       }
+    } else if (role === "DRIVER") {
+      off = NotificationService.addListener("trip_assignment", (data) => {
+        try {
+          navigation?.navigate("DriverDashboard", {
+            fromNotification: true,
+            tripId: data?.tripId,
+            msId: data?.msId,
+            dbsId: data?.dbsId,
+            vehicleId: data?.vehicleId,
+          });
+        } catch (_error) {
+          // no-op
+        }
+      });
+      const last = NotificationService.getLastEvent("trip_assignment");
+      if (last?.tripId) {
+        navigation?.navigate("DriverDashboard", {
+          fromNotification: true,
+          tripId: last.tripId,
+          msId: last.msId,
+          dbsId: last.dbsId,
+          vehicleId: last.vehicleId,
+        });
+      }
     }
     return () => off && off();
   }, [role, navigation]);
@@ -87,75 +108,9 @@ export default function RoleTabs({ navigation }) {
     return null;
   }
 
-  // DBS Operator: Dashboard + Requests + Transfers + Decanting
+  // DBS Operator: Use DBS Navigator with drawer navigation
   if (role === "DBS_OPERATOR") {
-    return (
-      <Tab.Navigator
-        screenOptions={{
-          headerTitleAlign: "center",
-          tabBarActiveTintColor: "#3b82f6",
-          tabBarInactiveTintColor: "#64748b",
-          tabBarLabelStyle: {
-            fontSize: 10,
-            fontWeight: "500",
-            marginTop: 4,
-          },
-          tabBarStyle: {
-            paddingBottom: 20,
-            paddingTop: 6,
-            height: 70,
-          },
-        }}
-      >
-        <Tab.Screen
-          name="DBS Dashboard"
-          component={DBSDashboard}
-          options={{
-            title: "Dashboard",
-            tabBarIcon: ({ color }) => (
-              <AppIcon icon="dashboard" size={20} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Manual Request"
-          component={ManualRequest}
-          options={{
-            tabBarIcon: ({ color }) => (
-              <AppIcon icon="requests" size={20} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="DbsStockTransfers"
-          component={DbsStockTransfers}
-          options={{
-            title: "Transfers",
-            tabBarIcon: ({ color }) => (
-              <AppIcon icon="transfers" size={20} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Decanting"
-          component={Decanting}
-          options={{
-            tabBarIcon: ({ color }) => (
-              <AppIcon icon="factory" size={20} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{
-            tabBarIcon: ({ color }) => (
-              <AppIcon icon="settings" size={20} color={color} />
-            ),
-          }}
-        />
-      </Tab.Navigator>
-    );
+    return <DBSNavigator />;
   }
 
   // MS Operator
@@ -229,10 +184,18 @@ export default function RoleTabs({ navigation }) {
   // Removed SGL_DRIVER branch (legacy role no longer used)
 
   // Driver (New comprehensive role)
-  // Tab Navigator with 3 tabs
+  // Tab Navigator - DriverDashboard is first (main screen for trip assignments)
   if (role === "DRIVER") {
+    // Get the screen params passed from notification navigation
+    const screenParams = route?.params || {};
+    const targetScreen = screenParams?.screen;
+    const screenSpecificParams = screenParams?.params || screenParams;
+    
+
+    
     return (
       <Tab.Navigator
+        initialRouteName="DriverDashboard"
         screenOptions={{
           headerTitleAlign: "center",
           tabBarActiveTintColor: "#3b82f6",
@@ -250,21 +213,23 @@ export default function RoleTabs({ navigation }) {
         }}
       >
         <Tab.Screen
+          name="DriverDashboard"
+          component={DriverDashboard}
+          initialParams={screenSpecificParams?.tripId ? screenSpecificParams : undefined}
+          options={{
+            title: "Dashboard",
+            tabBarIcon: ({ color }) => (
+              <AppIcon icon="vehicle" size={20} color={color} />
+            ),
+          }}
+        />
+        <Tab.Screen
           name="Trips"
           component={TripHistory}
           options={{
             title: "Trips",
             tabBarIcon: ({ color }) => (
-              <AppIcon icon="dashboard" size={20} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="DriverDashboard"
-          component={DriverDashboard}
-          options={{
-            tabBarIcon: ({ color }) => (
-              <AppIcon icon="vehicle" size={20} color={color} />
+              <AppIcon icon="trips" size={20} color={color} />
             ),
           }}
         />

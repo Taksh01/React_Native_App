@@ -1,128 +1,296 @@
 /**
  * DBS-specific API helpers (moved out of api.js for clarity)
  */
-import {
-  mockSignalArrival,
-  mockGetPre,
-  mockStartDecant,
-  mockEndDecant,
-  mockGetEnd,
-  mockConfirmDelivery,
-} from "../api/mock";
 import { CONFIG } from "../config";
+import { useAuth } from "../store/auth";
 
-export const USE_MOCK_API = CONFIG.MOCK_MODE === true;
+// Default response for unimplemented features
+const defaultResponse = {
+  success: true,
+  data: null,
+  message: "Feature not implemented",
+};
+
+// Helper to create authenticated headers
+const getAuthHeaders = () => {
+  const { token } = useAuth.getState();
+
+
+
+  const headers = { "Content-Type": "application/json" };
+
+  if (token) {
+    headers["Authorization"] = `Token ${token}`;
+
+  } else {
+    console.warn(
+      "[DBS_API] No token available - request will be sent without authentication"
+    );
+  }
+
+  return headers;
+};
+
+// Error handling helper
+const handleApiError = (error, fallbackMessage) => {
+
+  if (error?.response?.data?.message) {
+    throw new Error(error.response.data.message);
+  }
+  if (error?.response?.status === 404) {
+    throw new Error("Resource not found");
+  }
+  if (error?.response?.status >= 500) {
+    throw new Error("Server error. Please try again later");
+  }
+  if (
+    error?.message?.includes("Network Error") ||
+    error?.code === "NETWORK_ERROR"
+  ) {
+    throw new Error("Network connection failed. Please check your connection");
+  }
+  throw new Error(fallbackMessage || "Operation failed. Please try again");
+};
 
 // DBS - Token-based operations
-export async function apiSignalArrival(token) {
-  if (USE_MOCK_API) return mockSignalArrival(token);
+export async function apiSignalArrival(tripToken) {
+  try {
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/api/dbs/stock-requests/arrival/confirm`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ tripToken }),
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
 
-  const response = await fetch(`${CONFIG.API_BASE_URL}/dbs/decant/arrive`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to signal arrival");
+    const data = await response.json();
+    console.log("apiSignalArrival response data:", data);
+    return data;
+  } catch (error) {
+    console.error("apiSignalArrival error:", error);
+    handleApiError(error, "Failed to signal arrival");
   }
-  return data;
 }
 
-export async function apiGetPre(token) {
-  if (USE_MOCK_API) return mockGetPre(token);
+export async function apiGetPre(tripToken) {
+  try {
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/dbs/decant/${tripToken}/pre`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
 
-  const response = await fetch(`${CONFIG.API_BASE_URL}/dbs/decant/pre`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
-  });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to get pre-decant data");
+    return response.json();
+  } catch (error) {
+    console.warn("Pre-decant data not available");
+    return defaultResponse;
   }
-  return data;
 }
 
-export async function apiStartDecant(token) {
-  if (USE_MOCK_API) return mockStartDecant(token);
+export async function apiStartDecant(tripToken, readings) {
+  try {
+    console.log("apiStartDecant called with:", { tripToken, readings });
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/api/dbs/stock-requests/decant/start`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ tripToken, ...readings }),
+      }
+    );
 
-  const response = await fetch(`${CONFIG.API_BASE_URL}/dbs/decant/start`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
-  });
+    console.log("apiStartDecant response status:", response.status);
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to start decant");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("apiStartDecant response data:", data);
+    return data;
+  } catch (error) {
+    console.error("apiStartDecant error:", error);
+    handleApiError(error, "Failed to start decant");
   }
-  return data;
 }
 
-export async function apiEndDecant(token) {
-  if (USE_MOCK_API) return mockEndDecant(token);
+export async function apiEndDecant(tripToken, readings) {
+  try {
+    console.log("apiEndDecant called with:", { tripToken, readings });
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/api/dbs/stock-requests/decant/end`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ tripToken, ...readings }),
+      }
+    );
 
-  const response = await fetch(`${CONFIG.API_BASE_URL}/dbs/decant/end`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
-  });
+    console.log("apiEndDecant response status:", response.status);
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to end decant");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("apiEndDecant response data:", data);
+    return data;
+  } catch (error) {
+    console.error("apiEndDecant error:", error);
+    handleApiError(error, "Failed to end decant");
   }
-  return data;
 }
 
-export async function apiGetEnd(token) {
-  if (USE_MOCK_API) return mockGetEnd(token);
+export async function apiGetEnd(tripToken) {
+  try {
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/dbs/decant/${tripToken}/end`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
 
-  // For token-based system, post-decant data is returned in apiEndDecant
-  // This function can be used to re-fetch if needed
-  const response = await fetch(`${CONFIG.API_BASE_URL}/dbs/decant/end`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
-  });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to get end data");
+    return response.json();
+  } catch (error) {
+    console.warn("Post-decant data not available");
+    return defaultResponse;
   }
-  return data;
 }
 
-export async function apiConfirmDelivery(token, payload) {
-  if (USE_MOCK_API) return mockConfirmDelivery(token, payload);
+export async function apiOperatorAcknowledge(tripToken, deliveredQty) {
+  try {
+    console.log("apiOperatorAcknowledge called with:", {
+      tripToken,
+      deliveredQty,
+    });
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/api/dbs/stock-requests/decant/confirm`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ tripToken, deliveredQty }),
+      }
+    );
 
-  const response = await fetch(`${CONFIG.API_BASE_URL}/dbs/decant/confirm`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, ...payload }),
-  });
+    console.log("apiOperatorAcknowledge response status:", response.status);
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to confirm delivery");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("apiOperatorAcknowledge response data:", data);
+    return data;
+  } catch (error) {
+    console.error("apiOperatorAcknowledge error:", error);
+    handleApiError(error, "Failed to acknowledge decant");
   }
-  return data;
 }
 
-// DBS Notification registration
-// DBS notification registration moved to src/lib/api.js (common)
+// DBS - Manual Request
+export async function apiSubmitManualRequest(requestData) {
 
-// Driver token helper for DBS (like msApi.getDriverToken)
-export async function getDriverToken(driverId) {
-  const response = await fetch(
-    `${CONFIG.API_BASE_URL}/driver/${driverId}/token`
-  );
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to get driver token");
+  let response;
+  try {
+    const headers = getAuthHeaders();
+
+
+    response = await fetch(`${CONFIG.API_BASE_URL}/api/stock-requests/`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(requestData),
+    });
+
+
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    handleApiError(error, "Failed to submit manual request");
   }
-  return data;
+}
+
+// DBS - Get Trip Schedule
+export async function apiGetDbsTripSchedule() {
+  try {
+    const response = await fetch(`${CONFIG.API_BASE_URL}/api/dbs/dashboard/`, {
+      method: "GET",
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    return { trips: [] };
+  }
+}
+
+export async function getStockTransfers(dbsId, { startDate, endDate } = {}) {
+  let response;
+  try {
+    const params = new URLSearchParams();
+    if (startDate) params.append("startDate", startDate);
+    if (endDate) params.append("endDate", endDate);
+
+    const queryString = params.toString();
+    const url = `${CONFIG.API_BASE_URL}/api/dbs/transfers${
+      queryString ? `?${queryString}` : ""
+    }`;
+
+    response = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    return data;
+  } catch (error) {
+    console.warn("Stock transfers not available");
+    return { transfers: [] };
+  }
+}
+
+export async function apiGetManualRequests() {
+  try {
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/api/dbs/stock-requests`,
+      {
+        method: "GET",
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    // console.log("apiGetManualRequests response:", data);
+    return data;
+  } catch (error) {
+    handleApiError(error, "Failed to fetch manual requests");
+  }
 }

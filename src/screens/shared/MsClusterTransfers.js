@@ -8,13 +8,15 @@ import {
   View,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
-import { GTS } from "../../api/client";
+// import { apiGetMsCluster } from "../../lib/eicApi";
 import { useThemedStyles } from "../../theme";
 import AppIcon from "../../components/AppIcon";
 import StockTransfersView from "./StockTransfersView";
 
 export default function MsClusterTransfers({
   msId,
+  fetchApi,
+  fetchClusterApi, // New prop for cluster API
   msName: fallbackMsName,
   requireSelectionTitle = "Select a DBS to view stock transfers",
   requireSelectionSubtitle = "Choose a linked depot to load transfer activity",
@@ -135,8 +137,13 @@ export default function MsClusterTransfers({
     refetch,
   } = useQuery({
     queryKey: ["msCluster", msId],
-    queryFn: () => GTS.getMsCluster(msId),
-    enabled: Boolean(msId),
+    queryFn: () => {
+      if (!fetchClusterApi) {
+        throw new Error("fetchClusterApi prop is required");
+      }
+      return fetchClusterApi(msId);
+    },
+    enabled: Boolean(msId && fetchClusterApi),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -249,6 +256,7 @@ export default function MsClusterTransfers({
   return (
     <StockTransfersView
       dbsId={selectedDbsId}
+      fetchApi={fetchApi} // Pass the API prop down
       headerComponent={headerComponent}
       requireSelectionTitle={
         !msId

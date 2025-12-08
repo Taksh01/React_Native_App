@@ -21,7 +21,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { GTS } from "../../api/client";
+import { apiGetClusters, apiUpdateCluster } from "../../lib/eicApi";
 import { useAuth } from "../../store/auth";
 import { useThemedStyles } from "../../theme";
 
@@ -55,7 +55,7 @@ export default function ClusterManagement() {
   const [clusterForm, setClusterForm] = useState(createClusterForm({}));
 
   const queryClient = useQueryClient();
-  const { user, updateUserPermissions } = useAuth();
+  const { user } = useAuth();
   const themeRef = useRef(null);
 
   const styles = useThemedStyles((theme) => {
@@ -454,25 +454,8 @@ export default function ClusterManagement() {
     });
   });
 
-  const {
-    data: permissionData,
-    isFetching: isPermissionsFetching,
-    refetch: refetchPermissions,
-  } = useQuery({
-    queryKey: ["eicPermissions", user?.id],
-    queryFn: () => GTS.getEICPermissions(user?.id),
-    enabled: !!user?.id,
-    staleTime: 60 * 1000,
-  });
-
-  useEffect(() => {
-    if (permissionData) {
-      updateUserPermissions(permissionData);
-    }
-  }, [permissionData, updateUserPermissions]);
-
-  const effectivePermissions = permissionData || user?.permissions || {};
-  const canManageClusters = true; // Temporarily enabled for testing
+  // Check cluster management permission from auth store (populated during login)
+  const canManageClusters = user?.permissions?.can_manage_clusters ?? false;
 
   const {
     data: clusterData,
@@ -482,7 +465,7 @@ export default function ClusterManagement() {
     error,
   } = useQuery({
     queryKey: ["clusters"],
-    queryFn: () => GTS.getClusters(),
+    queryFn: () => apiGetClusters(),
     staleTime: 30 * 1000,
   });
 
@@ -490,7 +473,7 @@ export default function ClusterManagement() {
 
   const updateClusterMutation = useMutation({
     mutationFn: ({ clusterId, payload }) =>
-      GTS.updateCluster(clusterId, payload),
+      apiUpdateCluster(clusterId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["clusters"]);
       setShowEditModal(false);
@@ -499,10 +482,8 @@ export default function ClusterManagement() {
   });
 
   const handleRefresh = useCallback(() => {
-    const tasks = [refetch()];
-    if (user?.id) tasks.push(refetchPermissions());
-    Promise.all(tasks).catch(() => undefined);
-  }, [refetch, refetchPermissions, user?.id]);
+    refetch();
+  }, [refetch]);
 
   const openEditModal = useCallback((cluster) => {
     setSelectedCluster(cluster);
@@ -719,7 +700,7 @@ export default function ClusterManagement() {
         renderItem={renderClusterCard}
         refreshControl={
           <RefreshControl
-            refreshing={isFetching || isPermissionsFetching}
+            refreshing={isFetching}
             onRefresh={handleRefresh}
           />
         }

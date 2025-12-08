@@ -1,4 +1,15 @@
 import { CONFIG } from "../config";
+import { useAuth } from "../store/auth";
+
+// Helper to create authenticated headers
+const getAuthHeaders = () => {
+  const { token } = useAuth.getState();
+  const headers = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Token ${token}`;
+  }
+  return headers;
+};
 
 /**
  * Driver API functions for trip management and operations
@@ -6,13 +17,13 @@ import { CONFIG } from "../config";
 
 export const driverApi = {
   // Trip Management
-  acceptTrip: async ({ tripId, driverId }) => {
+  acceptTrip: async ({ tripId }) => {
     const response = await fetch(
-      `${CONFIG.API_BASE_URL}/driver/trip/${tripId}/accept`,
+      `${CONFIG.API_BASE_URL}/api/driver-trips/accept/`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ driverId }),
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ stock_request_id: tripId }),
       }
     );
 
@@ -23,14 +34,13 @@ export const driverApi = {
     return data;
   },
 
-  // ! Not used in DriverDashboard (Planned)
-  rejectTrip: async ({ tripId, driverId, reason }) => {
+  rejectTrip: async ({ tripId, reason }) => {
     const response = await fetch(
-      `${CONFIG.API_BASE_URL}/driver/trip/${tripId}/reject`,
+      `${CONFIG.API_BASE_URL}/api/driver-trips/reject/`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ driverId, reason }),
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ stock_request_id: tripId, reason }),
       }
     );
 
@@ -45,7 +55,7 @@ export const driverApi = {
   updateLocation: async ({ token, latitude, longitude }) => {
     const response = await fetch(`${CONFIG.API_BASE_URL}/driver/location`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ token, latitude, longitude }),
     });
 
@@ -60,7 +70,7 @@ export const driverApi = {
   confirmArrivalAtMS: async ({ token }) => {
     const response = await fetch(`${CONFIG.API_BASE_URL}/driver/arrival/ms`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ token }),
     });
 
@@ -74,7 +84,7 @@ export const driverApi = {
   confirmArrivalAtDBS: async ({ token }) => {
     const response = await fetch(`${CONFIG.API_BASE_URL}/driver/arrival/dbs`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ token }),
     });
 
@@ -98,7 +108,8 @@ export const driverApi = {
       `${CONFIG.API_BASE_URL}/driver/meter-reading/confirm`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           token,
           stationType, // 'MS' or 'DBS'
@@ -121,7 +132,10 @@ export const driverApi = {
   // ! Not used in DriverDashboard (Planned)
   getMeterReadings: async ({ token, stationType }) => {
     const response = await fetch(
-      `${CONFIG.API_BASE_URL}/driver/meter-readings/${stationType}?token=${token}`
+      `${CONFIG.API_BASE_URL}/driver/meter-readings/${stationType}?token=${token}`,
+      {
+        headers: getAuthHeaders(),
+      }
     );
 
     const data = await response.json();
@@ -137,7 +151,8 @@ export const driverApi = {
       `${CONFIG.API_BASE_URL}/driver/trip/complete`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: getAuthHeaders(),
         body: JSON.stringify({ token }),
       }
     );
@@ -160,7 +175,7 @@ export const driverApi = {
     const safeLocation = location || {};
     const response = await fetch(`${CONFIG.API_BASE_URL}/driver/emergency`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         token,
         emergencyType,
@@ -184,7 +199,10 @@ export const driverApi = {
   // Trip Status
   getTripStatus: async ({ token }) => {
     const response = await fetch(
-      `${CONFIG.API_BASE_URL}/driver/trip/status?token=${token}`
+      `${CONFIG.API_BASE_URL}/driver/trip/status?token=${token}`,
+      {
+        headers: getAuthHeaders(),
+      }
     );
 
     const data = await response.json();
@@ -199,7 +217,10 @@ export const driverApi = {
   // ! But used my ms operator so keep it here
   getDriverToken: async (driverId) => {
     const response = await fetch(
-      `${CONFIG.API_BASE_URL}/driver/${driverId}/token`
+      `${CONFIG.API_BASE_URL}/driver/${driverId}/token`,
+      {
+        headers: getAuthHeaders(),
+      }
     );
     const data = await response.json();
     if (!response.ok) {
@@ -210,7 +231,10 @@ export const driverApi = {
   // Fetch trip history for a driver (past trips)
   getTripHistory: async ({ driverId, page = 1, limit = 50 } = {}) => {
     const response = await fetch(
-      `${CONFIG.API_BASE_URL}/driver/${driverId}/trips?page=${page}&limit=${limit}`
+      `${CONFIG.API_BASE_URL}/driver/${driverId}/trips?page=${page}&limit=${limit}`,
+      {
+        headers: getAuthHeaders(),
+      }
     );
 
     const data = await response.json();

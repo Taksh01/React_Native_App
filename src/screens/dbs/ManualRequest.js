@@ -18,11 +18,13 @@ import AppTextField from "../../components/AppTextField";
 import AppButton from "../../components/AppButton";
 import AppIcon from "../../components/AppIcon";
 import { useThemedStyles } from "../../theme";
+import { apiSubmitManualRequest } from "../../lib/dbsApi";
 
 export default function ManualRequest() {
   const [qty, setQty] = useState("");
   const qtyRef = useRef(null);
   const [requiredBy, setRequiredBy] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // const [showDatePicker, setShowDatePicker] = useState(false);
   // const [showTimePicker, setShowTimePicker] = useState(false);
 
@@ -250,7 +252,7 @@ export default function ManualRequest() {
     })
   );
 
-  const submit = () => {
+  const submit = async () => {
     const trimmed = qty.trim();
     const num = parseFloat(trimmed);
 
@@ -270,18 +272,45 @@ export default function ManualRequest() {
       );
       return;
     }
+
     // Hide keyboard only on successful validation
     Keyboard.dismiss();
+    setIsSubmitting(true);
 
-    // FUTURE: POST /dbs/requests with { qty: num, requiredBy: requiredBy.toISOString() }
-    Alert.alert(
-      "Manual Request (mock)",
-      `Requested Qty: ${num}\nRequired by: ${formatDate(
-        requiredBy
-      )} ${formatTime(requiredBy)}`
-    );
-    setQty("");
-    setRequiredBy(null);
+    try {
+      // Format the payload as requested
+      const payload = {
+        requested_qty_kg: num,
+        requested_by_date: requiredBy.toISOString().split("T")[0], // "2024-12-04"
+        requested_by_time: requiredBy.toTimeString().split(" ")[0], // "14:30:00"
+      };
+
+      const response = await apiSubmitManualRequest(payload);
+
+      Alert.alert(
+        "Request Submitted",
+        `Successfully submitted request for ${num} kg\nRequired by: ${formatDate(
+          requiredBy
+        )} ${formatTime(requiredBy)}`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setQty("");
+              setRequiredBy(null);
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert(
+        "Request Failed",
+        error.message || "Failed to submit request. Please try again.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -419,9 +448,9 @@ export default function ManualRequest() {
             </View>
 
             <AppButton
-              title="Submit Request"
+              title={isSubmitting ? "Submitting..." : "Submit Request"}
               onPress={submit}
-              disabled={!qty.trim() || !requiredBy}
+              disabled={!qty.trim() || !requiredBy || isSubmitting}
             />
           </View>
         </View>

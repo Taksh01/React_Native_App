@@ -11,16 +11,30 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../store/auth";
-import { GTS } from "../../api/client";
+import { apiGetDbsTripSchedule } from "../../lib/dbsApi";
 import AppIcon from "../../components/AppIcon";
 import TripDetailsModal from "../../components/TripDetailsModal";
-import { deriveStatusCategory, formatStatusLabel } from "../../lib/tripStatus";
 import { useThemedStyles } from "../../theme";
 
 const STATUS_COLORS = {
-  DISPATCHED: "#2563eb",
-  DECANTING: "#38bdf8",
-  COMPLETED: "#10b981",
+  PENDING: "#fbbf24", // Amber
+  AT_MS: "#3b82f6", // Blue
+  IN_TRANSIT: "#8b5cf6", // Purple
+  AT_DBS: "#f97316", // Orange
+  DECANTING_CONFIRMED: "#06b6d4", // Cyan
+  COMPLETED: "#10b981", // Green
+  CANCELLED: "#ef4444", // Red
+  DEFAULT: "#94a3b8", // Slate
+};
+
+const STATUS_LABELS = {
+  PENDING: "Pending",
+  AT_MS: "At MS",
+  IN_TRANSIT: "In Transit",
+  AT_DBS: "At DBS",
+  DECANTING_CONFIRMED: "Decanting Confirmed",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
 };
 
 const formatDateHeading = (value) => {
@@ -64,7 +78,8 @@ const buildSections = (trips = []) => {
     .reverse();
 };
 
-const getStatusColor = (status) => STATUS_COLORS[deriveStatusCategory(status)];
+const getStatusColor = (status) => STATUS_COLORS[status] || STATUS_COLORS.DEFAULT;
+const getStatusLabel = (status) => STATUS_LABELS[status] || status;
 
 export default function DBSDashboard() {
   const { user } = useAuth();
@@ -210,7 +225,7 @@ export default function DBSDashboard() {
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["dbsTripSchedule", dbsId],
-    queryFn: () => GTS.getDbsTripSchedule(dbsId),
+    queryFn: () => apiGetDbsTripSchedule(),
     refetchInterval: 60000,
     enabled: Boolean(dbsId),
   });
@@ -270,7 +285,7 @@ export default function DBSDashboard() {
           ]}
         >
           <Text style={styles.statusText}>
-            {formatStatusLabel(item.status)}
+            {getStatusLabel(item.status)}
           </Text>
         </View>
       </View>

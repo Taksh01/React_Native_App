@@ -19,7 +19,7 @@ import { useThemedStyles } from "../theme";
 
 export default function LoginScreen({ route, navigation }) {
   const selectedRole = route?.params?.role;
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { setUser } = useAuth();
@@ -34,32 +34,41 @@ export default function LoginScreen({ route, navigation }) {
       ]);
       return;
     }
-    if (!username || !password) {
-      Alert.alert("Missing fields", "Enter both username and password.");
+    if (!email || !password) {
+      Alert.alert("Missing fields", "Enter both email and password.");
       return;
     }
     try {
       setLoading(true);
-      console.log("Attempting login with:", { username, role: selectedRole });
+
       const { user, token } = await apiLogin({
-        username,
+        email,
         password,
         role: selectedRole,
       });
-      console.log("Login successful:", { user, token });
+
+      
+      // ⬇️ CHECK PERMISSIONS OBJECT ⬇️
+
+
+
       setUser(user, token);
+
 
       // Register device token depending on role
       try {
         if (user.role === "DBS_OPERATOR") {
           await NotificationService.initializeForDBS(user.id);
-          console.log("DBS notifications initialized for user:", user.id);
+
         } else if (user.role === "MS_OPERATOR") {
           await NotificationService.initializeForMS(user.id);
-          console.log("MS notifications initialized for user:", user.id);
+
+        } else if (user.role === "EIC") {
+          await NotificationService.initializeForEIC(user.id);
+
         } else if (user.role === "DRIVER" || user.role === "SGL_DRIVER") {
           await NotificationService.registerDriverDeviceToken(user.id);
-          console.log("Driver device token registered for user:", user.id);
+
         }
       } catch (tokenError) {
         console.error("Failed to register/init notifications:", tokenError);
@@ -141,12 +150,13 @@ export default function LoginScreen({ route, navigation }) {
             )}
 
             <View style={styles.field}>
-              <Text style={styles.label}>Username</Text>
+              <Text style={styles.label}>Email</Text>
               <AppTextField
-                placeholder="Enter username"
+                placeholder="Enter email"
                 autoCapitalize="none"
-                value={username}
-                onChangeText={setUsername}
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
                 returnKeyType="next"
               />
             </View>

@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "117375280062",
-    "project_id": "gts-app-ce5ca",
-    "storage_bucket": "gts-app-ce5ca.firebasestorage.app"
+    "project_number": "914487311410",
+    "project_id": "gts-mobile-company",
+    "storage_bucket": "gts-mobile-company.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:117375280062:android:d6a662d1a1ce5807c18fef",
+        "mobilesdk_app_id": "1:914487311410:android:bca393dc384d5ddd4a902b",
         "android_client_info": {
           "package_name": "com.gtsapp"
         }
@@ -15,19 +15,12 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCCXl5ULcFZVN6FMQZPX4BieJklUD4_1NI"
+          "current_key": "AIzaSyA8_gI97NhUaSMCiv0xD6xSgJzJEDMwhuU"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": []
-        },
-        "analytics_service": {
-          "status": 1
-        },
-        "cloud_messaging": {
-          "status": 2,
-          "apns_config": []
         }
       }
     }

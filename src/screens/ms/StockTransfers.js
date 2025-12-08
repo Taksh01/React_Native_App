@@ -2,6 +2,8 @@ import React from "react";
 import { useAuth } from "../../store/auth";
 import MsClusterTransfers from "../shared/MsClusterTransfers";
 
+import { apiGetStockTransfers, apiGetMsCluster } from "../../lib/msApi";
+
 export default function MsStockTransfers() {
   const { user } = useAuth();
   const msId = user?.msId || null;
@@ -9,6 +11,8 @@ export default function MsStockTransfers() {
   return (
     <MsClusterTransfers
       msId={msId}
+      fetchApi={apiGetStockTransfers}
+      fetchClusterApi={apiGetMsCluster}
       msName={user?.msName}
       requireSelectionTitle="Select a DBS to inspect transfers"
       requireSelectionSubtitle="Pick a connected depot to review live transfer activity."

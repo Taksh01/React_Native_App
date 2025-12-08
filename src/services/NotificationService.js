@@ -22,6 +22,19 @@ try {
   console.warn("[WARN] Firebase messaging not available:", error.message);
 }
 
+// Configure notification handler to suppress system alerts in foreground
+// This ensures we only show our custom in-app alert (Accept/Reject)
+Notifications.setNotificationHandler({
+  handleNotification: async () => {
+
+    return {
+      shouldShowAlert: false, // Hides system notification when app is open
+      shouldPlaySound: true,  // Still plays sound
+      shouldSetBadge: false,
+    };
+  },
+});
+
 class NotificationService {
   constructor() {
     this.deviceToken = null;
@@ -43,21 +56,45 @@ class NotificationService {
 
   // Navigate to a tab nested under the root 'App' stack, passing params reliably
   navigateToTab(tabName, params = {}) {
-    if (!this.navigationRef) return;
+    if (!this.navigationRef) {
+      console.warn("[NotificationService] Navigation ref not set");
+      return;
+    }
+    
+
+    
     try {
-      // navigating into nested App stack
-      // Preferred: navigate into the nested App stack specifying the tab screen
-      this.navigationRef.navigate("App", {
-        screen: tabName,
-        params,
-      });
-    } catch (_error) {
-      // Fallback: try direct navigation by screen name if registered at root
+      // Method 1: Use CommonActions for more reliable nested navigation
+      const { CommonActions } = require("@react-navigation/native");
+      
+      this.navigationRef.dispatch(
+        CommonActions.navigate({
+          name: "App",
+          params: {
+            screen: tabName,
+            params: params,
+          },
+        })
+      );
+
+    } catch (error1) {
+      console.warn("[NotificationService] CommonActions failed:", error1?.message);
+      
+      // Method 2: Try direct navigation
       try {
-        // fallback to direct tab navigate
-        this.navigationRef.navigate(tabName, params);
-      } catch (e) {
-        console.warn(`Navigation failed to ${tabName}:`, e?.message || e);
+        this.navigationRef.navigate("App", {
+          screen: tabName,
+          params,
+        });
+      } catch (error2) {
+        console.warn("[NotificationService] Nested navigate failed:", error2?.message);
+        
+        // Method 3: Try direct tab navigation
+        try {
+          this.navigationRef.navigate(tabName, params);
+        } catch (error3) {
+          console.warn("[NotificationService] Direct navigate failed:", error3?.message);
+        }
       }
     }
   }
@@ -96,6 +133,11 @@ class NotificationService {
     return this._lastEvents[event];
   }
 
+  // Clear last event (consume it)
+  clearLastEvent(event) {
+    delete this._lastEvents[event];
+  }
+
   // Listen to auth changes so we can process pending intents once user is ready
   setupAuthSubscription() {
     if (this._authUnsub) return; // only once
@@ -117,21 +159,25 @@ class NotificationService {
   }
 
   _queuePendingIntent(intent) {
-    // queue pending intent
+
     this._pendingIntent = intent;
   }
 
   _flushPendingIntent() {
     if (!this._pendingIntent) return;
+    if (!this._pendingIntent) return;
     const { tabName, params, event, eventData } = this._pendingIntent;
     const user = this.getCurrentUser();
+    
     // flush pending intent if ready
-    if (!this.navigationRef || !user) return; // still not ready
+    if (!this.navigationRef || !user) return;
+
     try {
+
       if (tabName) this.navigateToTab(tabName, params || {});
       if (event) this.emit(event, eventData || {});
       this._pendingIntent = null;
-      // pending intent processed
+      this._pendingIntent = null;
     } catch (e) {
       console.warn("Failed to flush pending intent:", e?.message || e);
     }
@@ -149,7 +195,7 @@ class NotificationService {
       if (Platform.OS === "android") {
         const { status } = await Notifications.requestPermissionsAsync();
         if (status !== "granted") {
-          console.log("[ERROR] Android notification permission denied");
+
           return false;
         }
       }
@@ -194,7 +240,7 @@ class NotificationService {
 
       const token = await messaging().getToken();
       this.deviceToken = token;
-      console.log("[INFO] Device Token:", token);
+
       return token;
     } catch (error) {
       console.error("Error getting device token:", error);
@@ -210,7 +256,7 @@ class NotificationService {
       }
 
       await apiRegisterDriverToken(userId, this.deviceToken);
-      console.log("[SUCCESS] Device token registered with backend");
+
       return true;
     } catch (error) {
       console.error("Error registering device token:", error);
@@ -226,7 +272,7 @@ class NotificationService {
       }
 
       await apiUnregisterDriverToken(userId, this.deviceToken);
-      console.log("[SUCCESS] Device token unregistered from backend");
+
       return true;
     } catch (error) {
       console.error("Error unregistering device token:", error);
@@ -242,7 +288,7 @@ class NotificationService {
       }
 
       await apiRegisterDBSToken(userId, this.deviceToken);
-      console.log("[SUCCESS] DBS device token registered with backend");
+
       return true;
     } catch (error) {
       console.error("Error registering DBS device token:", error);
@@ -258,7 +304,7 @@ class NotificationService {
       }
 
       await apiUnregisterDBSToken(userId, this.deviceToken);
-      console.log("[SUCCESS] DBS device token unregistered from backend");
+
       return true;
     } catch (error) {
       console.error("Error unregistering DBS device token:", error);
@@ -274,7 +320,7 @@ class NotificationService {
       }
 
       await apiRegisterMSToken(userId, this.deviceToken);
-      console.log("[SUCCESS] MS device token registered with backend");
+
       return true;
     } catch (error) {
       console.error("Error registering MS device token:", error);
@@ -290,7 +336,7 @@ class NotificationService {
       }
 
       await apiUnregisterMSToken(userId, this.deviceToken);
-      console.log("[SUCCESS] MS device token unregistered from backend");
+
       return true;
     } catch (error) {
       console.error("Error unregistering MS device token:", error);
@@ -306,7 +352,7 @@ class NotificationService {
       }
 
       await apiRegisterEICToken(userId, this.deviceToken);
-      console.log("[SUCCESS] EIC device token registered with backend");
+
       return true;
     } catch (error) {
       console.error("Error registering EIC device token:", error);
@@ -322,7 +368,7 @@ class NotificationService {
       }
 
       await apiUnregisterEICToken(userId, this.deviceToken);
-      console.log("[SUCCESS] EIC device token unregistered from backend");
+
       return true;
     } catch (error) {
       console.error("Error unregistering EIC device token:", error);
@@ -334,25 +380,24 @@ class NotificationService {
   setupForegroundHandler() {
     if (messaging) {
       return messaging().onMessage(async (remoteMessage) => {
-        console.log("[INFO] Foreground notification received:", remoteMessage);
 
-        Alert.alert(
-          remoteMessage.notification?.title || "New Notification",
-          remoteMessage.notification?.body || "You have a new message",
-          [
-            { text: "Dismiss", style: "cancel" },
-            {
-              text: "View",
-              onPress: () => this.handleNotificationTap(remoteMessage.data),
-            },
-          ]
-        );
+        
+        // Don't show Alert.alert here. 
+        // Instead, just pass the data to the app logic so it can show its own UI (e.g. DriverDashboard modal)
+        if (remoteMessage.data) {
+           this.handleNotificationTap(remoteMessage.data);
+        }
       });
     } else {
       // Expo Notifications fallback
       return Notifications.addNotificationReceivedListener((notif) => {
         const data = notif?.request?.content?.data || {};
-        console.log("[INFO] [Expo] Foreground notification received:", data);
+
+        
+        // If it's a trip assignment, emit the event immediately so the dashboard shows the alert
+        if (data.type === "trip_assignment" || data.type === "TRIP_OFFER") {
+          this.handleNotificationTap(data); // Reuse the logic to emit event
+        }
       });
     }
   }
@@ -360,8 +405,9 @@ class NotificationService {
   // Setup Android notification channel
   async setupAndroidChannel() {
     try {
-      await Notifications.setNotificationChannelAsync("default", {
-        name: "Default",
+      // Use a new channel ID to force update settings on device
+      await Notifications.setNotificationChannelAsync("default_v2", {
+        name: "Default Channel",
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: "#FFFFFF",
@@ -383,14 +429,14 @@ class NotificationService {
     if (messaging) {
       // Firebase handlers
       messaging().onNotificationOpenedApp((remoteMessage) => {
-        console.log("[INFO] Notification opened app:", remoteMessage);
+
         this.handleNotificationTap(remoteMessage.data);
       });
       messaging()
         .getInitialNotification()
         .then((remoteMessage) => {
           if (remoteMessage) {
-            console.log("[INFO] App opened from notification:", remoteMessage);
+
             this.handleNotificationTap(remoteMessage.data);
           }
         });
@@ -398,13 +444,13 @@ class NotificationService {
       // Expo Notifications fallback
       Notifications.addNotificationResponseReceivedListener((response) => {
         const data = response?.notification?.request?.content?.data || {};
-        console.log("[INFO] [Expo] Notification response:", data);
+
         this.handleNotificationTap(data);
       });
       Notifications.getLastNotificationResponseAsync().then((response) => {
         if (response) {
           const data = response?.notification?.request?.content?.data || {};
-          console.log("[INFO] [Expo] App opened from notification:", data);
+
           this.handleNotificationTap(data);
         }
       });
@@ -418,7 +464,7 @@ class NotificationService {
     }
 
     return messaging().onTokenRefresh(async (newToken) => {
-      console.log("FCM token refreshed:", newToken);
+
       this.deviceToken = newToken;
 
       // Re-register with backend if user is logged in
@@ -459,14 +505,49 @@ class NotificationService {
 
   // Handle notification tap logic
   handleNotificationTap(data) {
+
     const user = this.getCurrentUser();
     if (!data) return;
+    
+
+    
     // handle notification tap
 
-    // Driver notifications
-    if (data.type === "trip_assignment") {
+    // Driver notifications - trip_assignment OR TRIP_OFFER (backend legacy)
+    if (data.type === "trip_assignment" || data.type === "TRIP_OFFER") {
+
+      const eventPayload = {
+        tripId: data.stock_request_id || data.tripId,
+        dbsId: data.to_dbs || data.dbs_name || data.dbsId || "Unknown DBS", // Map to_dbs from backend
+        dbsIdRaw: data.dbs_id, // Store raw ID for API calls
+        quantity: data.quantity_kg || data.quantity,
+        priority: data.priority,
+        msId: data.from_ms || data.msId || "MS-001", // Map from_ms from backend
+        vehicleId: data.vehicleId || "Unknown",
+        ...data,
+      };
+      
+
+      
+      // Emit event for DriverDashboard to handle
+      this.emit("trip_assignment", eventPayload);
+      
+      // Navigate to DriverDashboard tab
+      // Note: RoleTabs.js defines the tab name as "DriverDashboard"
+      // But RootNavigator usually nests RoleTabs under "App"
       if (this.navigationRef) {
-        this.navigateToTab("Dashboard", { fromNotification: true, ...data });
+        // Use navigateToTab which handles nested navigation robustly
+        this.navigateToTab("DriverDashboard", { 
+          fromNotification: true, 
+          ...eventPayload 
+        });
+      } else {
+        this._queuePendingIntent({
+          tabName: "DriverDashboard",
+          params: { fromNotification: true, ...eventPayload },
+          event: "trip_assignment",
+          eventData: eventPayload,
+        });
       }
       return;
     }
@@ -533,6 +614,44 @@ class NotificationService {
             stationId: data.stationId,
           },
         });
+      }
+      return;
+    }
+
+    // Driver response notifications (ACCEPTED/REJECTED)
+    // Backend sends type: "DRIVER_REJECTED" or "DRIVER_ACCEPTED"
+    if (data.type === "driver_response" || data.type === "DRIVER_REJECTED" || data.type === "DRIVER_ACCEPTED") {
+
+      
+      // Determine action from type if not explicitly provided
+      let action = data.action || data.status;
+      if (!action) {
+        if (data.type === "DRIVER_REJECTED") action = "REJECTED";
+        if (data.type === "DRIVER_ACCEPTED") action = "ACCEPTED";
+      }
+
+      const eventPayload = {
+        requestId: data.requestId || data.stock_request_id,
+        driverId: data.driverId || data.driver_id,
+        action: action,
+        ...data
+      };
+      
+      // Emit event for IncomingStockRequests to handle
+      this.emit("driver_response", eventPayload);
+      
+      // Navigate if needed (optional, but good for background taps)
+      if (user?.role === "EIC") {
+         if (this.navigationRef) {
+            this.navigateToTab("StockRequests", { fromNotification: true, ...eventPayload });
+         } else {
+            this._queuePendingIntent({
+              tabName: "StockRequests",
+              params: { fromNotification: true, ...eventPayload },
+              event: "driver_response",
+              eventData: eventPayload,
+            });
+         }
       }
       return;
     }
@@ -604,6 +723,43 @@ class NotificationService {
       }
       return;
     }
+
+    // EIC driver response notifications (driver accepted/rejected trip)
+    if (data.type === "driver_response") {
+      const eventPayload = {
+        requestId: data.requestId,
+        driverId: data.driverId,
+        driverName: data.driverName,
+        action: data.action, // "ACCEPTED" or "REJECTED"
+        driverAction: data.driverAction, // alternate key
+      };
+      
+
+      
+      // Emit event for EIC screen to handle
+      this.emit("driver_response", eventPayload);
+      
+      // Navigate to StockRequests if EIC
+      if (user?.role === "EIC" && this.navigationRef) {
+        this.navigateToTab("StockRequests", {
+          fromNotification: true,
+          type: "driver_response",
+          ...eventPayload,
+        });
+      } else {
+        this._queuePendingIntent({
+          tabName: "StockRequests",
+          params: {
+            fromNotification: true,
+            type: "driver_response",
+            ...eventPayload,
+          },
+          event: "driver_response",
+          eventData: eventPayload,
+        });
+      }
+      return;
+    }
   }
 
   // Initialize all notification handlers
@@ -613,6 +769,16 @@ class NotificationService {
       const ownership = Constants?.appOwnership || "unknown";
       const isStandalone = ownership === "standalone";
       this.limitedNotifications = !isStandalone || !messaging;
+
+      // Configure notification handler to suppress system alerts in foreground
+      // This ensures we only show our custom in-app alert (Accept/Reject)
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: false, // Hides system notification when app is open
+          shouldPlaySound: true,  // Still plays sound
+          shouldSetBadge: false,
+        }),
+      });
 
       // Request permissions
       const hasPermission = await this.requestPermission();

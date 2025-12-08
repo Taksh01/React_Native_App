@@ -1,8 +1,27 @@
 // src/api/client.js
 import axios from "axios";
 import { CONFIG } from "../config";
-import * as mock from "./mock";
-import * as eicMock from "./eicMock";
+
+// Error handling helper
+const handleApiError = (error, fallbackMessage) => {
+  console.error("API Error:", error?.message || error);
+  if (error?.response?.data?.message) {
+    throw new Error(error.response.data.message);
+  }
+  if (error?.response?.status === 404) {
+    throw new Error("Resource not found");
+  }
+  if (error?.response?.status >= 500) {
+    throw new Error("Server error. Please try again later");
+  }
+  if (
+    error?.message?.includes("Network Error") ||
+    error?.code === "NETWORK_ERROR"
+  ) {
+    throw new Error("Network connection failed. Please check your connection");
+  }
+  throw new Error(fallbackMessage || "Operation failed. Please try again");
+};
 
 export const api = axios.create({
   baseURL: CONFIG.API_BASE_URL,
@@ -10,100 +29,121 @@ export const api = axios.create({
 });
 
 export const GTS = {
-  // ⬇️ add role as an optional 3rd argument
+  // AUTH
   async login(username, password, role) {
-    if (CONFIG.MOCK_MODE) return mock.mockLogin(username, password, role);
-    // send role too (backend can ignore it if not needed)
-    // amazonq-ignore-next-line
-    const { data } = await api.post("/auth/login", {
-      username,
-      password,
-      role,
-    });
-    return data;
+    try {
+      const { data } = await api.post("/auth/login", {
+        username,
+        password,
+        role,
+      });
+      return data;
+    } catch (error) {
+      handleApiError(error, "Login failed. Please check your credentials");
+    }
   },
 
-  // amazonq-ignore-next-line
+  // PROPOSALS
   async fetchProposals() {
-    if (CONFIG.MOCK_MODE) return mock.fetchProposals();
-    const { data } = await api.get("/proposals?sort=priority,score");
-    return data;
+    try {
+      const { data } = await api.get("/proposals?sort=priority,score");
+      return data;
+    } catch (error) {
+      console.warn("Proposals not available, returning empty list");
+      return { proposals: [] };
+    }
   },
 
   async approveProposal(id) {
-    if (CONFIG.MOCK_MODE) return mock.approveProposal(id);
-    const { data } = await api.post(`/proposals/${id}/approve`);
-    return data;
+    try {
+      const { data } = await api.post(`/proposals/${id}/approve`);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to approve proposal");
+    }
   },
 
+  // DRIVER
   async fetchMyTrip() {
-    if (CONFIG.MOCK_MODE) return mock.fetchMyTrip();
-    const { data } = await api.get("/driver/mytrip");
-    return data;
+    try {
+      const { data } = await api.get("/driver/mytrip");
+      return data;
+    } catch (error) {
+      console.warn("No trip assigned");
+      return { trip: null };
+    }
   },
 
   async driverAcceptTrip(id) {
-    if (CONFIG.MOCK_MODE) return mock.driverAcceptTrip(id);
-    const { data } = await api.post(`/driver/trip/${id}/accept`);
-    return data;
+    try {
+      const { data } = await api.post(`/driver/trip/${id}/accept`);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to accept trip");
+    }
   },
 
+  // MS OPERATIONS
   async msPrefill(tokenId) {
-    if (CONFIG.MOCK_MODE) return mock.msPrefill(tokenId);
-    const { data } = await api.get(`/ms/fill/${tokenId}/prefill`);
-    return data;
+    try {
+      const { data } = await api.get(`/ms/fill/${tokenId}/prefill`);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to prefill data");
+    }
   },
 
   async msStartFill(tokenId) {
-    if (CONFIG.MOCK_MODE) return mock.msStartFill(tokenId);
-    const { data } = await api.post(`/ms/fill/${tokenId}/start`);
-    return data;
+    try {
+      const { data } = await api.post(`/ms/fill/${tokenId}/start`);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to start fill");
+    }
   },
 
   async msEndFill(tokenId) {
-    if (CONFIG.MOCK_MODE) return mock.msEndFill(tokenId);
-    const { data } = await api.post(`/ms/fill/${tokenId}/end`);
-    return data;
+    try {
+      const { data } = await api.post(`/ms/fill/${tokenId}/end`);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to end fill");
+    }
   },
 
   async generateSTO(tripId) {
-    if (CONFIG.MOCK_MODE) return mock.generateSTO?.(tripId) || {};
-    const { data } = await api.post(`/sto/${tripId}/generate`);
-    return data;
-  },
-
-  // EIC Stock Requests API
-  async getStockRequests(filters = {}) {
-    if (CONFIG.MOCK_MODE) return eicMock.mockGetStockRequests(filters);
     try {
-      const { data } = await api.get("/eic/stock-requests", { params: filters });
+      const { data } = await api.post(`/sto/${tripId}/generate`);
       return data;
     } catch (error) {
-      console.warn(
-        "Falling back to mock stock requests:",
-        error?.message || error
-      );
-      return eicMock.mockGetStockRequests(filters);
+      console.warn("STO generation not available");
+      return { sto: null };
+    }
+  },
+
+  // EIC OPERATIONS
+  async getStockRequests(filters = {}) {
+    try {
+      const { data } = await api.get("/eic/stock-requests", {
+        params: filters,
+      });
+      return data;
+    } catch (error) {
+      console.warn("Stock requests not available");
+      return { requests: [] };
     }
   },
 
   async getStockRequest(requestId) {
-    if (CONFIG.MOCK_MODE) return eicMock.mockGetStockRequest(requestId);
     try {
       const { data } = await api.get(`/eic/stock-requests/${requestId}`);
       return data;
     } catch (error) {
-      console.warn(
-        `Falling back to mock stock request ${requestId}:`,
-        error?.message || error
-      );
-      return eicMock.mockGetStockRequest(requestId);
+      handleApiError(error, "Stock request not found");
     }
   },
 
   async approveStockRequest(requestId, approvalData) {
-    if (CONFIG.MOCK_MODE)
-      return eicMock.mockApproveStockRequest(requestId, approvalData);
     try {
       const { data } = await api.post(
         `/eic/stock-requests/${requestId}/approve`,
@@ -111,17 +151,11 @@ export const GTS = {
       );
       return data;
     } catch (error) {
-      console.warn(
-        `Approve stock request fallback to mock (${requestId}):`,
-        error?.message || error
-      );
-      return eicMock.mockApproveStockRequest(requestId, approvalData);
+      handleApiError(error, "Failed to approve stock request");
     }
   },
 
   async rejectStockRequest(requestId, rejectionData) {
-    if (CONFIG.MOCK_MODE)
-      return eicMock.mockRejectStockRequest(requestId, rejectionData);
     try {
       const { data } = await api.post(
         `/eic/stock-requests/${requestId}/reject`,
@@ -129,293 +163,318 @@ export const GTS = {
       );
       return data;
     } catch (error) {
-      console.warn(
-        `Reject stock request fallback to mock (${requestId}):`,
-        error?.message || error
-      );
-      return eicMock.mockRejectStockRequest(requestId, rejectionData);
+      handleApiError(error, "Failed to reject stock request");
     }
   },
 
   async getEICDashboardStats() {
-    if (CONFIG.MOCK_MODE) return eicMock.mockGetEICDashboardStats();
     try {
       const { data } = await api.get("/eic/dashboard");
       return data;
     } catch (error) {
-      console.warn(
-        "Falling back to mock EIC dashboard stats:",
-        error?.message || error
-      );
-      return eicMock.mockGetEICDashboardStats();
+      console.warn("EIC dashboard not available");
+      return { stats: [], summary: {} };
     }
   },
 
   async getEICPermissions(userId) {
-    if (CONFIG.MOCK_MODE) return eicMock.mockGetEICPermissions(userId);
     try {
       const { data } = await api.get("/eic/permissions");
       return data;
     } catch (error) {
-      console.warn(
-        "Falling back to mock EIC permissions:",
-        error?.message || error
-      );
-      return eicMock.mockGetEICPermissions(userId);
+      console.warn("EIC permissions not available");
+      return { permissions: {} };
     }
   },
 
   async getManualTokenAssignments() {
-    if (CONFIG.MOCK_MODE) return eicMock.mockGetManualTokens();
-    const { data } = await api.get("/eic/manual-tokens");
-    return data;
-  },
-
-  async assignManualToken(payload = {}) {
-    if (CONFIG.MOCK_MODE) return eicMock.mockAssignManualToken(payload);
-    const { data } = await api.post("/eic/manual-tokens", payload);
-    return data;
-  },
-
-  async getPendingDrivers() {
-    if (CONFIG.MOCK_MODE) return eicMock.mockGetPendingDrivers();
     try {
-      const { data } = await api.get("/eic/driver-approvals/pending");
+      const { data } = await api.get("/eic/manual-tokens");
       return data;
     } catch (error) {
-      console.warn(
-        "Falling back to mock pending drivers:",
-        error?.message || error
-      );
-      return eicMock.mockGetPendingDrivers();
+      console.warn("Manual tokens not available");
+      return { assignments: [] };
     }
   },
 
-  async approveDriver(driverId, payload = {}) {
-    if (CONFIG.MOCK_MODE)
-      return eicMock.mockApproveDriver(driverId, payload);
-    const { data } = await api.post(
-      `/eic/driver-approvals/${driverId}/approve`,
-      payload
-    );
-    return data;
+  async assignManualToken(payload = {}) {
+    try {
+      const { data } = await api.post("/eic/manual-tokens", payload);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to assign manual token");
+    }
   },
 
-  async rejectDriver(driverId, payload = {}) {
-    if (CONFIG.MOCK_MODE)
-      return eicMock.mockRejectDriver(driverId, payload);
-    const { data } = await api.post(
-      `/eic/driver-approvals/${driverId}/reject`,
-      payload
-    );
-    return data;
-  },
+  // NOTE: Driver approval APIs moved to lib/eicApi.js
+  // - apiGetPendingDrivers
+  // - apiApproveDriver
+  // - apiRejectDriver
 
   async getClusters() {
-    if (CONFIG.MOCK_MODE) return eicMock.mockGetClusters();
     try {
       const { data } = await api.get("/eic/clusters");
       return data;
     } catch (error) {
-      console.warn(
-        "Falling back to mock clusters:",
-        error?.message || error
-      );
-      return eicMock.mockGetClusters();
+      console.warn("Clusters not available");
+      return { clusters: [] };
     }
   },
 
   async updateCluster(clusterId, payload = {}) {
-    if (CONFIG.MOCK_MODE)
-      return eicMock.mockUpdateCluster(clusterId, payload);
-    const { data } = await api.put(`/eic/clusters/${clusterId}`, payload);
-    return data;
+    try {
+      const { data } = await api.put(`/eic/clusters/${clusterId}`, payload);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to update cluster");
+    }
   },
 
   async getReconciliationReports(filters = {}) {
-    if (CONFIG.MOCK_MODE) return eicMock.mockGetReconciliationReports(filters);
-    const { data } = await api.get("/eic/reconciliation/reports", {
-      params: filters,
-    });
-    return data;
+    try {
+      const { data } = await api.get("/eic/reconciliation/reports", {
+        params: filters,
+      });
+      return data;
+    } catch (error) {
+      console.warn("Reconciliation reports not available");
+      return { reports: [] };
+    }
   },
 
   async triggerReconciliationAction(reportId, payload = {}) {
-    if (CONFIG.MOCK_MODE)
-      return eicMock.mockTriggerReconciliationAction(reportId, payload);
-    const { data } = await api.post(
-      `/eic/reconciliation/reports/${reportId}/actions`,
-      payload
-    );
-    return data;
+    try {
+      const { data } = await api.post(
+        `/eic/reconciliation/reports/${reportId}/actions`,
+        payload
+      );
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to trigger reconciliation action");
+    }
   },
 
+  // FDODO OPERATIONS
   async fdodoCredit(dbsId) {
-    if (CONFIG.MOCK_MODE) return mock.fdodoCredit?.(dbsId) || {};
-    const endpoint = dbsId ? `/fdodo/${dbsId}/credit` : "/fdodo/credit";
-    const { data } = await api.get(endpoint);
-    return data;
+    try {
+      const endpoint = dbsId ? `/fdodo/${dbsId}/credit` : "/fdodo/credit";
+      const { data } = await api.get(endpoint);
+      return data;
+    } catch (error) {
+      console.warn("FDODO credit not available");
+      return { credit: 0, status: "unknown" };
+    }
   },
 
   async fdodoRequest(payload) {
-    if (CONFIG.MOCK_MODE) return mock.fdodoRequest?.(payload) || {};
-    const { data } = await api.post("/fdodo/requests", payload);
-    return data;
+    try {
+      const { data } = await api.post("/fdodo/requests", payload);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to submit FDODO request");
+    }
   },
 
   async getFdodoRequests(dbsId) {
-    if (CONFIG.MOCK_MODE) return mock.getFdodoRequests?.(dbsId) || {};
-    const endpoint = dbsId ? `/fdodo/${dbsId}/requests` : "/fdodo/requests";
-    const { data } = await api.get(endpoint);
-    return data;
+    try {
+      const endpoint = dbsId ? `/fdodo/${dbsId}/requests` : "/fdodo/requests";
+      const { data } = await api.get(endpoint);
+      return data;
+    } catch (error) {
+      console.warn("FDODO requests not available");
+      return { requests: [] };
+    }
   },
 
   async fdodoConfirmFill(requestId, payload) {
-    if (CONFIG.MOCK_MODE)
-      return mock.fdodoConfirmFill?.(requestId, payload) || {};
-    const { data } = await api.post(
-      `/fdodo/requests/${requestId}/confirm`,
-      payload
-    );
-    return data;
+    try {
+      const { data } = await api.post(
+        `/fdodo/requests/${requestId}/confirm`,
+        payload
+      );
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to confirm FDODO fill");
+    }
   },
 
   async getFdodoDashboard(dbsId) {
-    if (CONFIG.MOCK_MODE) return mock.getFdodoDashboard?.(dbsId) || {};
-    const endpoint = dbsId ? `/fdodo/${dbsId}/dashboard` : "/fdodo/dashboard";
-    const { data } = await api.get(endpoint);
-    return data;
+    try {
+      const endpoint = dbsId ? `/fdodo/${dbsId}/dashboard` : "/fdodo/dashboard";
+      const { data } = await api.get(endpoint);
+      return data;
+    } catch (error) {
+      console.warn("FDODO dashboard not available");
+      return { dashboard: {} };
+    }
   },
 
-  // ---- DBS Operator endpoints ----
+  // DBS OPERATIONS
   async dbsPreDecant(tripId) {
-    if (CONFIG.MOCK_MODE) return mock.dbsPreDecant?.(tripId) || {};
-    const { data } = await api.get(`/dbs/decant/${tripId}/pre`);
-    return data;
+    try {
+      const { data } = await api.get(`/dbs/decant/${tripId}/pre`);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to get pre-decant data");
+    }
   },
+
   async dbsStartDecant(tripId) {
-    if (CONFIG.MOCK_MODE) return mock.dbsStartDecant?.(tripId) || {};
-    const { data } = await api.post(`/dbs/decant/${tripId}/start`);
-    return data;
+    try {
+      const { data } = await api.post(`/dbs/decant/${tripId}/start`);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to start decant");
+    }
   },
+
   async dbsEndDecant(tripId) {
-    if (CONFIG.MOCK_MODE) return mock.dbsEndDecant?.(tripId) || {};
-    const { data } = await api.post(`/dbs/decant/${tripId}/end`);
-    return data;
+    try {
+      const { data } = await api.post(`/dbs/decant/${tripId}/end`);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to end decant");
+    }
   },
+
   async dbsConfirmDecant(tripId, { operatorSig, driverSig, deliveredQty }) {
-    if (CONFIG.MOCK_MODE)
-      return (
-        mock.dbsConfirmDecant?.(tripId, {
-          operatorSig,
-          driverSig,
-          deliveredQty,
-        }) || {}
-      );
-    // amazonq-ignore-next-line
-    const { data } = await api.post(`/dbs/decant/${tripId}/confirm`, {
-      operatorSig,
-      driverSig,
-      deliveredQty,
-    });
-    return data;
+    try {
+      const { data } = await api.post(`/dbs/decant/${tripId}/confirm`, {
+        operatorSig,
+        driverSig,
+        deliveredQty,
+      });
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to confirm decant");
+    }
   },
 
-  // Lists
   async dbsDeliveries() {
-    if (CONFIG.MOCK_MODE) return mock.dbsDeliveries?.() || {};
-    const { data } = await api.get(`/dbs/deliveries`);
-    return data;
+    try {
+      const { data } = await api.get(`/dbs/deliveries`);
+      return data;
+    } catch (error) {
+      console.warn("Deliveries not available");
+      return { deliveries: [] };
+    }
   },
+
   async dbsHistory() {
-    if (CONFIG.MOCK_MODE) return mock.dbsHistory?.() || {};
-    const { data } = await api.get(`/dbs/history`);
-    return data;
+    try {
+      const { data } = await api.get(`/dbs/history`);
+      return data;
+    } catch (error) {
+      console.warn("History not available");
+      return { history: [] };
+    }
   },
 
-  // Reconcile
   async dbsReconcile() {
-    if (CONFIG.MOCK_MODE) return mock.dbsReconcile?.() || {};
-    const { data } = await api.get(`/dbs/reconcile`);
-    return data;
+    try {
+      const { data } = await api.get(`/dbs/reconcile`);
+      return data;
+    } catch (error) {
+      console.warn("Reconcile data not available");
+      return { reconcile: [] };
+    }
   },
+
   async dbsPushReconcile(ids) {
-    if (CONFIG.MOCK_MODE) return mock.dbsPushReconcile?.(ids) || {};
-    const { data } = await api.post(`/dbs/reconcile/push`, { ids });
-    return data;
+    try {
+      const { data } = await api.post(`/dbs/reconcile/push`, { ids });
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to push reconcile data");
+    }
   },
 
-  // Manual Request (simple demo payload; adjust to your backend later)
   async dbsManualRequest(payload) {
-    if (CONFIG.MOCK_MODE) return mock.dbsManualRequest?.(payload) || {};
-    const { data } = await api.post(`/dbs/requests`, payload);
-    return data;
+    try {
+      const { data } = await api.post(`/dbs/requests`, payload);
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to submit manual request");
+    }
   },
 
-  // Customer API endpoints
+  // CUSTOMER OPERATIONS
   async getCustomerDashboard(dbsId) {
-    if (CONFIG.MOCK_MODE) return mock.getCustomerDashboard(dbsId);
-    const { data } = await api.get(`/customer/${dbsId}/dashboard`);
-    return data;
+    try {
+      const { data } = await api.get(`/customer/${dbsId}/dashboard`);
+      return data;
+    } catch (error) {
+      console.warn("Customer dashboard not available");
+      return { dashboard: {} };
+    }
   },
 
   async getCurrentStocks(dbsId) {
-    if (CONFIG.MOCK_MODE) return mock.getCurrentStocks(dbsId);
-    const { data } = await api.get(`/customer/${dbsId}/stocks`);
-    return data;
+    try {
+      const { data } = await api.get(`/customer/${dbsId}/stocks`);
+      return data;
+    } catch (error) {
+      console.warn("Stock data not available");
+      return { stocks: [] };
+    }
   },
 
   async getTransportTracking(dbsId) {
-    if (CONFIG.MOCK_MODE) return mock.getTransportTracking(dbsId);
-    const { data } = await api.get(`/customer/${dbsId}/transport`);
-    return data;
+    try {
+      const { data } = await api.get(`/customer/${dbsId}/transport`);
+      return data;
+    } catch (error) {
+      console.warn("Transport tracking not available");
+      return { transports: [] };
+    }
   },
 
-  async getStockTransfers(dbsId) {
-    if (CONFIG.MOCK_MODE) return mock.getStockTransfers(dbsId);
-    const { data } = await api.get(`/customer/${dbsId}/transfers`);
-    return data;
-  },
+
 
   async getPendingTrips(dbsId) {
-    if (CONFIG.MOCK_MODE) return mock.getPendingTrips(dbsId);
-    const { data } = await api.get(`/customer/${dbsId}/pending-trips`);
-    return data;
+    try {
+      const { data } = await api.get(`/customer/${dbsId}/pending-trips`);
+      return data;
+    } catch (error) {
+      console.warn("Pending trips not available");
+      return { trips: [] };
+    }
   },
 
-  async getDbsTripSchedule(dbsId) {
-    if (CONFIG.MOCK_MODE) return mock.getDbsTripSchedule(dbsId);
-    const { data } = await api.get(`/dbs/${dbsId}/schedule`);
-    return data;
-  },
 
-  async getMsTripSchedule(msId) {
-    if (CONFIG.MOCK_MODE) return mock.getMsTripSchedule(msId);
-    const { data } = await api.get(`/ms/${msId}/schedule`);
-    return data;
-  },
+
+
 
   async getMsCluster(msId) {
-    if (CONFIG.MOCK_MODE) return mock.getMsCluster(msId);
-    const { data } = await api.get(`/ms/${msId}/cluster`);
-    return data;
+    try {
+      const { data } = await api.get(`/ms/${msId}/cluster`);
+      return data;
+    } catch (error) {
+      console.warn("MS cluster not available");
+      return { cluster: {} };
+    }
   },
 
-  async getNetworkOverview() {
-    if (CONFIG.MOCK_MODE) return mock.getNetworkOverview();
-    const { data } = await api.get(`/network/overview`);
-    return data;
-  },
+
 
   async getCustomerPermissions(userId) {
-    if (CONFIG.MOCK_MODE) return mock.getCustomerPermissions(userId);
-    const { data } = await api.get(`/customer/permissions/${userId}`);
-    return data;
+    try {
+      const { data } = await api.get(`/customer/permissions/${userId}`);
+      return data;
+    } catch (error) {
+      console.warn("Customer permissions not available");
+      return { permissions: {} };
+    }
   },
 
   async acceptTrip(tripId, userId) {
-    if (CONFIG.MOCK_MODE) return mock.acceptTrip(tripId, userId);
-    const { data } = await api.post(`/customer/trips/${tripId}/accept`, { userId });
-    return data;
+    try {
+      const { data } = await api.post(`/customer/trips/${tripId}/accept`, {
+        userId,
+      });
+      return data;
+    } catch (error) {
+      handleApiError(error, "Failed to accept trip");
+    }
   },
 };

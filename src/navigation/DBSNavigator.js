@@ -11,12 +11,12 @@ import { useAuth } from "../store/auth";
 import { gestureHandlerAvailable } from "../components/GestureCompatWrapper";
 import AppIcon from "../components/AppIcon";
 
-// FDODO Screens
-import FdodoDashboard from "../screens/fdodo/FdodoDashboard";
-import FDODORequest from "../screens/fdodo/FDODORequest";
-import FdodoStockTransfers from "../screens/fdodo/StockTransfers";
-import CurrentStocks from "../screens/customer/CurrentStocks";
-import TransportTracking from "../screens/customer/TransportTracking";
+// DBS Screens
+import DBSDashboard from "../screens/dbs/Dashboard";
+import Decanting from "../screens/dbs/Decanting";
+import ManualRequest from "../screens/dbs/ManualRequest";
+import RequestStatus from "../screens/dbs/RequestStatus";
+import DbsStockTransfers from "../screens/dbs/StockTransfers";
 import SettingsScreen from "../screens/Settings";
 
 let createDrawerNavigator, DrawerContentScrollView, DrawerItemList;
@@ -47,8 +47,8 @@ const CustomDrawerContent = memo(function CustomDrawerContent(props) {
     logout();
   }, [logout]);
 
-  const userInitial = useMemo(() => user?.name?.charAt(0) || "F", [user?.name]);
-  const userName = useMemo(() => user?.name || "FDODO Customer", [user?.name]);
+  const userInitial = useMemo(() => user?.name?.charAt(0)?.toUpperCase() || "D", [user?.name]);
+  const userName = useMemo(() => user?.name || "DBS Operator", [user?.name]);
 
   return (
     <SafeAreaView style={styles.drawerContainer}>
@@ -58,15 +58,15 @@ const CustomDrawerContent = memo(function CustomDrawerContent(props) {
             <Text style={styles.avatarText}>{userInitial}</Text>
           </View>
           <View style={styles.userDetails}>
-            <Text style={styles.userName}>{userName}</Text>
-            <Text style={styles.userRole}>FDODO Customer</Text>
+            <Text style={styles.userName}>{user?.name || "DBS Operator"}</Text>
+            <Text style={styles.userRole}>DBS Operator</Text>
           </View>
         </View>
       </View>
 
       <DrawerContentScrollView {...props} style={styles.drawerContent}>
         <View style={styles.menuSection}>
-          <Text style={styles.sectionTitle}>MENU</Text>
+          <Text style={styles.sectionTitle}>OPERATIONS</Text>
           <DrawerItemList {...props} />
         </View>
       </DrawerContentScrollView>
@@ -123,7 +123,7 @@ const DrawerNavigator = memo(function DrawerNavigator() {
       drawerLabelStyle: {
         fontSize: 16,
         fontWeight: "500",
-        marginLeft: -10,
+        marginLeft: 4,
       },
       drawerItemStyle: {
         borderRadius: 8,
@@ -146,13 +146,13 @@ const DrawerNavigator = memo(function DrawerNavigator() {
 
   return (
     <Drawer.Navigator
-      initialRouteName="FdodoDashboard"
+      initialRouteName="DBSDashboard"
       drawerContent={drawerContent}
       screenOptions={screenOptions}
     >
       <Drawer.Screen
-        name="FdodoDashboard"
-        component={FdodoDashboard}
+        name="DBSDashboard"
+        component={DBSDashboard}
         options={{
           title: "Dashboard",
           drawerIcon: ({ color }) => (
@@ -161,28 +161,28 @@ const DrawerNavigator = memo(function DrawerNavigator() {
         }}
       />
       <Drawer.Screen
-        name="FdodoRequests"
-        component={FDODORequest}
+        name="ManualRequest"
+        component={ManualRequest}
         options={{
-          title: "Requests",
+          title: "Manual Request",
           drawerIcon: ({ color }) => (
             <AppIcon icon="requests" size={18} color={color} />
           ),
         }}
       />
       <Drawer.Screen
-        name="FdodoStocks"
-        component={CurrentStocks}
+        name="RequestStatus"
+        component={RequestStatus}
         options={{
-          title: "Current Stocks",
+          title: "Request Status",
           drawerIcon: ({ color }) => (
-            <AppIcon icon="stocks" size={18} color={color} />
+            <AppIcon icon="requestPending" size={18} color={color} />
           ),
         }}
       />
       <Drawer.Screen
-        name="FdodoTransfers"
-        component={FdodoStockTransfers}
+        name="DbsStockTransfers"
+        component={DbsStockTransfers}
         options={{
           title: "Stock Transfers",
           drawerIcon: ({ color }) => (
@@ -191,17 +191,17 @@ const DrawerNavigator = memo(function DrawerNavigator() {
         }}
       />
       <Drawer.Screen
-        name="FdodoTransport"
-        component={TransportTracking}
+        name="Decanting"
+        component={Decanting}
         options={{
-          title: "Transport Tracking",
+          title: "Decanting",
           drawerIcon: ({ color }) => (
-            <AppIcon icon="transport" size={18} color={color} />
+            <AppIcon icon="factory" size={18} color={color} />
           ),
         }}
       />
       <Drawer.Screen
-        name="FdodoSettings"
+        name="Settings"
         component={SettingsScreen}
         options={{
           title: "Settings",
@@ -232,32 +232,32 @@ function StackNavigator() {
       }}
     >
       <Stack.Screen
-        name="FdodoDashboard"
-        component={FdodoDashboard}
+        name="DBSDashboard"
+        component={DBSDashboard}
         options={{ title: "Dashboard" }}
       />
       <Stack.Screen
-        name="FdodoRequests"
-        component={FDODORequest}
-        options={{ title: "Requests" }}
+        name="ManualRequest"
+        component={ManualRequest}
+        options={{ title: "Manual Request" }}
       />
       <Stack.Screen
-        name="FdodoStocks"
-        component={CurrentStocks}
-        options={{ title: "Current Stocks" }}
+        name="RequestStatus"
+        component={RequestStatus}
+        options={{ title: "Request Status" }}
       />
       <Stack.Screen
-        name="FdodoTransfers"
-        component={FdodoStockTransfers}
+        name="DbsStockTransfers"
+        component={DbsStockTransfers}
         options={{ title: "Stock Transfers" }}
       />
       <Stack.Screen
-        name="FdodoTransport"
-        component={TransportTracking}
-        options={{ title: "Transport Tracking" }}
+        name="Decanting"
+        component={Decanting}
+        options={{ title: "Decanting" }}
       />
       <Stack.Screen
-        name="FdodoSettings"
+        name="Settings"
         component={SettingsScreen}
         options={{ title: "Settings" }}
       />
@@ -266,7 +266,7 @@ function StackNavigator() {
 }
 
 // Main export - chooses navigator based on availability
-export default function FdodoNavigator() {
+export default function DBSNavigator() {
   if (gestureHandlerAvailable && createDrawerNavigator) {
     return <DrawerNavigator />;
   }

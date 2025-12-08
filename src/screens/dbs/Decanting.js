@@ -10,6 +10,7 @@ import {
   Keyboard,
   ActivityIndicator,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRoute, useFocusEffect } from "@react-navigation/native";
@@ -20,6 +21,7 @@ import {
   apiEndDecant,
   apiGetEnd,
   apiConfirmDelivery,
+  apiOperatorAcknowledge,
   getDriverToken,
 } from "../../lib/dbsApi";
 import { CONFIG } from "../../config";
@@ -30,22 +32,33 @@ import AppTextField from "../../components/AppTextField";
 import { useThemedStyles } from "../../theme";
 
 // demo tripId — replace with selection later
-const DEFAULT_TRIP_ID = "TRIP-001";
+
 
 // Step legend:
-// 0 = Simulate Arrival
-// 1 = Start Decant
-// 2 = End Decant
-// 3 = Confirm & Close STO
+// 0 = Simulate Arrival (Wait for Notif)
+// 1 = Confirm Truck Arrival (Visual Check)
+// 2 = Enter Pre-Decant Readings & Start
+// 3 = Enter Post-Decant Readings & End
+// 4 = Confirm & Close STO
+const STORAGE_KEY = "@dbs_decanting_state";
+
 export default function Decanting() {
   const route = useRoute();
   const [step, setStep] = useState(0);
   const [qty, setQty] = useState("");
+  const [truckNumber, setTruckNumber] = useState("");
+  const [preReadings, setPreReadings] = useState({
+    pressure: "",
+    mfm: "",
+  });
+  const [postReadings, setPostReadings] = useState({
+    pressure: "",
+    mfm: "",
+  });
   const [opAck, setOpAck] = useState(false);
   const [drvAck, setDrvAck] = useState(true);
-  const [sapPushed, setSapPushed] = useState(false);
 
-  const [currentToken, setCurrentToken] = useState(null);
+  const [tripToken, setTripToken] = useState(null);
   const [tripId, setTripId] = useState(null);
   const [tokenLoading, setTokenLoading] = useState(false);
   const [arrivalGate, setArrivalGate] = useState({
@@ -56,7 +69,10 @@ export default function Decanting() {
   const [notifAssignment, setNotifAssignment] = useState({
     tripId: null,
     driverId: null,
+    truckNumber: null,
+    tripToken: null,
   });
+  const [isStateLoaded, setIsStateLoaded] = useState(false);
 
   // refs for keyboard/scroll
   const scrollRef = useRef(null);
@@ -67,10 +83,81 @@ export default function Decanting() {
     const off = NotificationService.addListener("dbs_arrival", (data) => {
       // Require both tripId and driverId to behave like MS
       if (!data?.tripId || !data?.driverId) return;
-      setNotifAssignment({ tripId: data.tripId, driverId: data.driverId });
+      setNotifAssignment({
+        tripId: data.tripId,
+        driverId: data.driverId,
+        truckNumber: data.truckNumber,
+        tripToken: data.tripToken,
+      });
     });
     return () => off && off();
   }, []);
+
+  // Persistence: Load State
+  useEffect(() => {
+    const loadState = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const state = JSON.parse(saved);
+          // Only restore if we are not already deep-linked (route params take precedence)
+          if (!route?.params?.tripId) {
+            if (state.step !== undefined) setStep(state.step);
+            if (state.tripId) setTripId(state.tripId);
+            if (state.tripToken) setTripToken(state.tripToken);
+            if (state.arrivalGate) setArrivalGate(state.arrivalGate);
+            if (state.notifAssignment) setNotifAssignment(state.notifAssignment);
+            if (state.truckNumber) setTruckNumber(state.truckNumber);
+            // Restore readings if needed (optional, but good for step 2/3)
+            if (state.preReadings) setPreReadings(state.preReadings);
+            if (state.postReadings) setPostReadings(state.postReadings);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load decanting state", e);
+      } finally {
+        setIsStateLoaded(true);
+      }
+    };
+    loadState();
+  }, []);
+
+  // Persistence: Save State
+  useEffect(() => {
+    if (!isStateLoaded) return;
+
+    const saveState = async () => {
+      // Only save if we have an active session (gate allowed or step > 0)
+      if (arrivalGate.allowed || step > 0) {
+        const state = {
+          step,
+          tripId,
+          tripToken,
+          arrivalGate,
+          notifAssignment,
+          truckNumber, // For display/logic
+          preReadings,
+          postReadings,
+        };
+        try {
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {
+          console.warn("Failed to save decanting state", e);
+        }
+      }
+    };
+    saveState();
+  }, [
+    isStateLoaded,
+    step,
+    tripId,
+    tripToken,
+    arrivalGate,
+    notifAssignment,
+    truckNumber,
+    preReadings,
+    postReadings,
+  ]);
 
   // Compute effective assigned ids (from route params, notification, or dev fallback)
   const assignedTripId = route?.params?.tripId || null;
@@ -78,11 +165,10 @@ export default function Decanting() {
   const effectiveAssignedTripId =
     assignedTripId ||
     notifAssignment.tripId ||
-    (devAssignmentEnabled ? DEFAULT_TRIP_ID : null);
+    notifAssignment.tripId;
   const effectiveAssignedDriverId =
     assignedDriverId ||
-    notifAssignment.driverId ||
-    (devAssignmentEnabled ? "DEV-DRIVER" : null);
+    notifAssignment.driverId;
 
   // Just-in-time token retrieval when an assignment exists (from notification or queue)
   useEffect(() => {
@@ -93,24 +179,33 @@ export default function Decanting() {
 
       // Dev or limited notifications -> create mock token immediately
       if (
-        NotificationService.areNotificationsLimited() ||
-        devAssignmentEnabled
+        NotificationService.areNotificationsLimited()
       ) {
+         if (cancelled) return;
+         setTokenLoading(false);
+         return;
+      }
+
+      // If we have a token from notification, use it directly
+      if (notifAssignment.tripToken) {
         if (cancelled) return;
-        const mockToken = `MOCK-DBS-${effectiveAssignedTripId}-${effectiveAssignedDriverId}-${Date.now()}`;
-        setCurrentToken(mockToken);
+        setTripToken(notifAssignment.tripToken);
         setTripId(effectiveAssignedTripId);
-        setArrivalGate({ allowed: true, forTrip: effectiveAssignedTripId });
+        setArrivalGate({
+          allowed: true,
+          forTrip: effectiveAssignedTripId,
+        });
         setTokenLoading(false);
         return;
       }
 
+      // Fallback: Fetch token if not in notification
       try {
         const driverTokenResponse = await getDriverToken(
           effectiveAssignedDriverId
         );
         if (cancelled) return;
-        setCurrentToken(driverTokenResponse.token);
+        setTripToken(driverTokenResponse.token);
         setTripId(driverTokenResponse.tripId || effectiveAssignedTripId);
         setArrivalGate({
           allowed: true,
@@ -124,7 +219,7 @@ export default function Decanting() {
             "Driver hasn't accepted this trip yet. Please ask the driver to accept the trip first, or wait for them to arrive at the DBS station.",
             [{ text: "OK" }]
           );
-          setCurrentToken(null);
+          setTripToken(null);
           setTripId(null);
           setArrivalGate({ allowed: false, forTrip: null });
         }
@@ -163,6 +258,18 @@ export default function Decanting() {
       if (last?.tripId) {
         setArrivalGate({ allowed: true, forTrip: last.tripId });
         if (!tripId) setTripId(last.tripId);
+        if (last.truckNumber) {
+          setNotifAssignment((prev) => ({
+            ...prev,
+            truckNumber: last.truckNumber,
+          }));
+        }
+        if (last.tripToken) {
+          setNotifAssignment((prev) => ({
+            ...prev,
+            tripToken: last.tripToken,
+          }));
+        }
       }
     }
   }, [route?.params?.type, route?.params?.tripId, tripId]);
@@ -183,83 +290,129 @@ export default function Decanting() {
           setNotifAssignment({
             tripId: notifTripId,
             driverId: route.params.driverId,
+            truckNumber: route.params.truckNumber,
+            tripToken: route.params.tripToken,
           });
         }
       } catch (_error) {}
     }, [route?.params, tripId])
   );
 
+  // Dev helper to simulate arrival without notification
+  const simulateDevArrival = () => {
+    const mockTripId = "TRIP-2573";
+    const mockTruck = "001";
+    const mockToken = "2573";
+    
+    setTripId(mockTripId);
+    setTripToken(mockToken);
+    setArrivalGate({ allowed: true, forTrip: mockTripId });
+    setNotifAssignment({
+      tripId: mockTripId,
+      driverId: "MOCK-DRIVER",
+      truckNumber: mockTruck,
+      tripToken: mockToken,
+    });
+    Alert.alert(
+      "Dev Mode",
+      `Simulated arrival for ${mockTripId} (${mockTruck}) with Token: ${mockToken}`
+    );
+  };
+
   // Mutations
   const signalArrival = useMutation({
-    mutationFn: () => apiSignalArrival(currentToken),
+    mutationFn: () => apiSignalArrival(tripToken),
     onSuccess: (data) => {
-      setStep(1);
+      // Auto-set truck number from notification if available, or from response if backend sends it
+      if (notifAssignment.truckNumber) {
+        setTruckNumber(notifAssignment.truckNumber);
+      }
+      setStep(2); // Skip old Step 1 (manual entry) -> Go straight to Pre-Readings
       setTripId(data.trip.id);
+      Alert.alert(
+        "Arrival Confirmed",
+        "Truck confirmed. Proceed to pre-decant readings."
+      );
     },
   });
 
-  const pre = useQuery({
-    queryKey: ["pre", currentToken, signalArrival.data?.trip?.status],
-    queryFn: () => apiGetPre(currentToken),
-    enabled: !!signalArrival.data?.trip && !!currentToken,
-  });
-
-  const start = useMutation({
-    mutationFn: () => apiStartDecant(currentToken),
+  const confirmTruck = useMutation({
+    mutationFn: () => Promise.resolve({ truckNumber, confirmed: true }),
     onSuccess: () => {
-      Alert.alert("Decant started", "Recording in progress.");
       setStep(2);
+      Alert.alert(
+        "Truck Confirmed",
+        `Truck ${truckNumber} confirmed. Now enter pre-decant readings.`
+      );
     },
   });
 
-  const end = useMutation({
-    mutationFn: () => apiEndDecant(currentToken),
-    onSuccess: (data) => {
-      Alert.alert("Decant ended", "Captured post-decant metrics.");
-      // Set step to 3 immediately to enable acknowledgment buttons
-      setStep(3);
-      // Trigger post data refetch
-      setTimeout(() => {
-        refetchPost();
-      }, 500);
-    },
-  });
-
-  const {
-    data: post,
-    refetch: refetchPost,
-    isFetching: postLoading,
-  } = useQuery({
-    queryKey: ["post", currentToken, end.data?.endTime],
-    queryFn: () => apiGetEnd(currentToken),
-    enabled: !!end.data && !!currentToken,
-    retry: 3,
-    retryDelay: 1000,
-  });
-
-  const confirm = useMutation({
-    mutationFn: () =>
-      apiConfirmDelivery(currentToken, {
-        deliveredQty: Number(qty),
-        operatorAck: opAck,
-        driverAck: drvAck,
-      }),
+  const confirmPreReadings = useMutation({
+    mutationFn: () => apiStartDecant(tripToken, preReadings),
     onSuccess: () => {
+      Alert.alert(
+        "Pre-readings Confirmed",
+        "Decanting process started. Proceed when ready to take post readings."
+      );
+      setStep(3);
+    },
+  });
+
+  const confirmPostReadings = useMutation({
+    mutationFn: () => apiEndDecant(tripToken, postReadings),
+    onSuccess: () => {
+      Alert.alert(
+        "Post-readings Confirmed",
+        "Decanting process completed. Proceed to confirm delivery."
+      );
+      setStep(4);
+    },
+  });
+
+  const acknowledgeOperator = useMutation({
+    mutationFn: () => apiOperatorAcknowledge(tripToken, qty),
+    onSuccess: () => {
+      setOpAck(true);
       Keyboard.dismiss();
       Alert.alert(
-        "Delivery confirmed",
-        "STO will be closed in SAP via GTS (mock)."
+        "Operator Acknowledged",
+        "Decanting confirmed successfully. Process completed.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Reset flow to start
+              setQty("");
+              setOpAck(false);
+              setDrvAck(true);
+
+              setStep(0);
+              setTruckNumber("");
+              setTripId(null);
+              setTripToken(null);
+              setArrivalGate({ allowed: false, forTrip: null });
+              setNotifAssignment({
+                tripId: null,
+                driverId: null,
+                truckNumber: null,
+                tripToken: null,
+              });
+              setPreReadings({ pressure: "", mfm: "" });
+              setPostReadings({ pressure: "", mfm: "" });
+              signalArrival.reset();
+              confirmTruck.reset();
+              confirmPreReadings.reset();
+              confirmPostReadings.reset();
+              acknowledgeOperator.reset();
+              
+              // Clear persistence
+              AsyncStorage.removeItem(STORAGE_KEY).catch((e) =>
+                console.warn("Failed to clear state", e)
+              );
+            }
+          }
+        ]
       );
-      // Reset flow to start
-      setQty("");
-      setOpAck(false);
-      setDrvAck(true);
-      setSapPushed(false);
-      setStep(0);
-      signalArrival.reset();
-      start.reset();
-      end.reset();
-      confirm.reset();
     },
   });
 
@@ -271,46 +424,42 @@ export default function Decanting() {
   };
   const onQtySubmit = () => Keyboard.dismiss();
 
-  // TEMP: Push delivery confirmation to SAP (stub)
-  const handlePushToSap = () => {
-    // TODO: POST to SAP integration endpoint once available
-    // Example: apiPushSap({ tripId, deliveredQty: Number(qty), operatorAck: opAck, driverAck: drvAck })
-    setSapPushed(true);
-    Alert.alert(
-      "Push to SAP (mock)",
-      "Delivery confirmation will be sent to SAP."
-    );
-  };
+
   // Gate each button strictly by step (and usual pending checks)
   // Arrival must be permitted via notification (or dev sim) to enable arrival confirmation
   const canSimulate = (() => {
     // gating evaluation for arrival button
     if (step !== 0 || signalArrival.isPending) return false;
-    if (!currentToken || !arrivalGate.allowed) return false;
+    if (!tripToken || !arrivalGate.allowed) return false;
     // If both trip ids are known, require match; otherwise allow to proceed (backend will validate)
     if (arrivalGate.forTrip && tripId) return arrivalGate.forTrip === tripId;
     return true;
   })();
-  const canStart = step === 1 && !start.isPending && !!pre.data;
-  const canEnd = step === 2 && !end.isPending && !!start.data;
-  const canConfirm =
+
+  // Step 2: Pre-Readings (was Step 3)
+  const canConfirmPre =
+    step === 2 &&
+    !confirmPreReadings.isPending &&
+    preReadings.pressure.trim() !== "" &&
+    preReadings.mfm.trim() !== "";
+
+  // Step 3: Post-Readings (was Step 4)
+  const canConfirmPost =
     step === 3 &&
-    !confirm.isPending &&
-    !!qty &&
-    !isNaN(parseFloat(qty)) &&
-    parseFloat(qty) > 0 &&
-    opAck &&
-    drvAck;
+    !confirmPostReadings.isPending &&
+    postReadings.pressure.trim() !== "" &&
+    postReadings.mfm.trim() !== "";
 
-  // Enable SAP push when Step 4 is reached (with the ack buttons)
-  const canPush =
-    step === 3 && !!qty && !isNaN(parseFloat(qty)) && parseFloat(qty) > 0;
+  // Step 4: Final Confirm (was Step 5)
 
-  // Acks only in step 3
-  const ackButtonsDisabled = step !== 3;
 
-  // Show post data if available (either from end mutation or query)
-  const postData = end.data || post;
+
+
+  // Acks only in step 4
+  const ackButtonsDisabled = step !== 4;
+
+  // Show post data from manual readings
+  const postData = confirmPostReadings.data;
 
   const styles = useThemedStyles((theme) =>
     StyleSheet.create({
@@ -535,34 +684,34 @@ export default function Decanting() {
                 {tokenLoading ? (
                   <ActivityIndicator size="small" color="#1e293b" />
                 ) : (
-                  <AppIcon
-                    icon={
-                      currentToken
-                        ? currentToken.startsWith("MOCK-")
-                          ? "robot"
-                          : "check"
-                        : "info"
-                    }
-                    size={16}
-                    color="#1e293b"
-                  />
+                    <AppIcon
+                      icon={
+                        tripToken
+                          ? tripToken.startsWith("MOCK-")
+                            ? "robot"
+                            : "check"
+                          : "info"
+                      }
+                      size={16}
+                      color="#1e293b"
+                    />
                 )}
               </View>
               <Text style={styles.tokenText}>
                 {tokenLoading
                   ? "Setting up token..."
-                  : currentToken
+                  : tripToken
                   ? `${
-                      currentToken.startsWith("MOCK-") ? "Mock" : "Real"
+                      tripToken.startsWith("MOCK-") ? "Mock" : "Real"
                     } Token - Trip: ${tripId}`
                   : "No active token"}
               </Text>
             </View>
-            {currentToken && (
+            {tripToken && (
               <View style={styles.tokenContent}>
                 <Text style={styles.tokenLabel}>Token ID:</Text>
-                <Text style={styles.tokenValue}>{currentToken}</Text>
-                {currentToken.startsWith("MOCK-") && (
+                <Text style={styles.tokenValue}>{tripToken}</Text>
+                {tripToken.startsWith("MOCK-") && (
                   <Text style={styles.tokenWarning}>
                     Development mode - real driver token not available
                   </Text>
@@ -583,6 +732,22 @@ export default function Decanting() {
               This step is enabled only after a DBS-arrival notification for the
               matching trip.
             </Text>
+            {arrivalGate.allowed && notifAssignment.truckNumber && (
+              <View
+                style={{
+                  marginBottom: 16,
+                  padding: 12,
+                  backgroundColor: "#f0fdf4",
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#bbf7d0",
+                }}
+              >
+                <Text style={{ color: "#166534", fontWeight: "bold" }}>
+                  Expected Truck: {notifAssignment.truckNumber}
+                </Text>
+              </View>
+            )}
             <AppButton
               title={
                 arrivalGate.allowed
@@ -595,11 +760,48 @@ export default function Decanting() {
               variant={canSimulate ? "primary" : "neutral"}
             />
             {!arrivalGate.allowed && (
-              <Text style={styles.statusMessage}>
-                Awaiting backend push notification: type=dbs_arrival with
-                tripId.
-              </Text>
+              <View>
+                <Text style={styles.statusMessage}>
+                  Awaiting backend push notification: type=dbs_arrival with
+                  tripId.
+                </Text>
+              </View>
             )}
+
+            {/* Dev Helper - Always Visible for now to help user unblock */}
+            <View style={styles.devSection}>
+              <Text style={styles.devTitle}>Development Mode</Text>
+              <Text style={styles.devText}>
+                Simulate arrival or reset state if stuck.
+              </Text>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <AppButton
+                  title="Simulate Arrival"
+                  onPress={simulateDevArrival}
+                  variant="outline"
+                  style={{ flex: 1 }}
+                />
+                <AppButton
+                  title="Reset State"
+                  onPress={() => {
+                    AsyncStorage.removeItem(STORAGE_KEY);
+                    setStep(0);
+                    setTripId(null);
+                    setTripToken(null);
+                    setArrivalGate({ allowed: false, forTrip: null });
+                    setNotifAssignment({
+                      tripId: null,
+                      driverId: null,
+                      truckNumber: null,
+                      tripToken: null,
+                    });
+                    Alert.alert("Reset", "State cleared.");
+                  }}
+                  variant="danger"
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </View>
             {signalArrival.error && (
               <Text style={styles.errorMessage}>
                 Arrival error: {signalArrival.error.message}
@@ -614,130 +816,141 @@ export default function Decanting() {
                 </Text>
               </View>
             )}
-
-            {/* Development Simulator */}
-            {(!process.env.NODE_ENV || process.env.NODE_ENV !== "production") &&
-              !process.env.EAS_BUILD && (
-                <View style={styles.devSection}>
-                  <Text style={styles.devTitle}>Development Mode</Text>
-                  <Text style={styles.devText}>
-                    For testing purposes, you can simulate an arrival
-                    notification below.
-                  </Text>
-                  <AppButton
-                    title="Simulate Arrival Notification"
-                    onPress={() => {
-                      const devTrip = tripId || DEFAULT_TRIP_ID;
-                      setArrivalGate({ allowed: true, forTrip: devTrip });
-                      setDevAssignmentEnabled(true);
-                      Alert.alert("Test", `Simulated arrival for ${devTrip}`);
-                    }}
-                    variant="neutral"
-                  />
-                </View>
-              )}
           </View>
 
-          {/* Step 2: Pre-decant Metrics */}
+          {/* Step 2: Pre-Decant Readings */}
           <View style={styles.card}>
             <View style={styles.stepHeader}>
               <View style={styles.stepIcon}>
                 <AppIcon icon="analytics" size={16} color="#1e293b" />
               </View>
-              <Text style={styles.stepTitle}>Step 2: Pre-decant Metrics</Text>
+              <Text style={styles.stepTitle}>Step 2: Pre-Decant Readings</Text>
             </View>
-            {pre.isPending && (
-              <Text style={styles.statusMessage}>
-                Loading pre-decant metrics...
-              </Text>
-            )}
-            {pre.error && (
-              <Text style={styles.errorMessage}>
-                No pre-decant metrics available. Complete truck arrival first.
-              </Text>
-            )}
-            {pre.data && (
-              <View style={styles.metricsContainer}>
-                <Text style={styles.metricsTitle}>Pre-Decant Readings</Text>
-                <Text style={styles.metricItem}>
-                  Pressure: {pre.data.pressure}
-                </Text>
-                <Text style={styles.metricItem}>
-                  Flow Rate: {pre.data.flow}
-                </Text>
-                <Text style={styles.metricItem}>
-                  MFM Reading: {pre.data.mfm}
+            <Text style={styles.stepDescription}>
+              Enter pre-decant meter readings before starting the decanting
+              process.
+            </Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Pressure Reading</Text>
+              <AppTextField
+                value={preReadings.pressure}
+                onChangeText={(text) =>
+                  setPreReadings((prev) => ({ ...prev, pressure: text }))
+                }
+                keyboardType="numeric"
+                placeholder="Enter pressure reading"
+                returnKeyType="next"
+                editable={step === 2}
+              />
+            </View>
+
+
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>MFM Reading</Text>
+              <AppTextField
+                value={preReadings.mfm}
+                onChangeText={(text) =>
+                  setPreReadings((prev) => ({ ...prev, mfm: text }))
+                }
+                keyboardType="numeric"
+                placeholder="Enter MFM reading"
+                returnKeyType="done"
+                editable={step === 2}
+              />
+            </View>
+
+            <AppButton
+              title="Start Decanting"
+              onPress={() => confirmPreReadings.mutate()}
+              disabled={!canConfirmPre}
+              loading={confirmPreReadings.isPending}
+              variant={canConfirmPre ? "primary" : "neutral"}
+            />
+
+            {confirmPreReadings.data && (
+              <View style={styles.successMessage}>
+                <AppIcon icon="check" size={16} color="#10b981" />
+                <Text style={styles.successText}>
+                  Pre-readings confirmed. Decanting process started.
                 </Text>
               </View>
             )}
-            <AppButton
-              title="Start Decanting Process"
-              onPress={() => start.mutate()}
-              disabled={!canStart}
-              loading={start.isPending}
-              variant={canStart ? "primary" : "neutral"}
-            />
           </View>
 
-          {/* Step 3: Post-decant Metrics */}
+          {/* Step 3: Post-Decant Readings */}
           <View style={styles.card}>
             <View style={styles.stepHeader}>
               <View style={styles.stepIcon}>
                 <AppIcon icon="analytics" size={16} color="#1e293b" />
               </View>
-              <Text style={styles.stepTitle}>
-                Step 3: End Decanting Process
-              </Text>
+              <Text style={styles.stepTitle}>Step 3: Post-Decant Readings</Text>
             </View>
+            <Text style={styles.stepDescription}>
+              Enter post-decant meter readings after completing the decanting
+              process.
+            </Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Pressure Reading</Text>
+              <AppTextField
+                value={postReadings.pressure}
+                onChangeText={(text) =>
+                  setPostReadings((prev) => ({ ...prev, pressure: text }))
+                }
+                keyboardType="numeric"
+                placeholder="Enter final pressure reading"
+                returnKeyType="next"
+                editable={step === 3}
+              />
+            </View>
+
+
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>MFM Reading</Text>
+              <AppTextField
+                value={postReadings.mfm}
+                onChangeText={(text) =>
+                  setPostReadings((prev) => ({ ...prev, mfm: text }))
+                }
+                keyboardType="numeric"
+                placeholder="Enter final MFM reading"
+                returnKeyType="done"
+                editable={step === 3}
+              />
+            </View>
+
             <AppButton
-              title="End Decanting Process"
-              onPress={() => end.mutate()}
-              disabled={!canEnd}
-              loading={end.isPending}
-              variant={canEnd ? "primary" : "neutral"}
+              title="End Decanting"
+              onPress={() => confirmPostReadings.mutate()}
+              disabled={!canConfirmPost}
+              loading={confirmPostReadings.isPending}
+              variant={canConfirmPost ? "primary" : "neutral"}
             />
-            {postLoading && (
-              <Text style={styles.statusMessage}>
-                Loading post-decant metrics...
-              </Text>
-            )}
-            {end.isPending && (
-              <Text style={styles.statusMessage}>
-                Ending decanting process...
-              </Text>
-            )}
+
             {postData && (
               <>
-                <View style={styles.metricsContainer}>
-                  <Text style={styles.metricsTitle}>Post-Decant Readings</Text>
-                  <Text style={styles.metricItem}>
-                    Pressure: {postData.pressure}
-                  </Text>
-                  <Text style={styles.metricItem}>
-                    Flow Rate: {postData.flow}
-                  </Text>
-                  <Text style={styles.metricItem}>
-                    MFM Reading: {postData.mfm}
-                  </Text>
-                </View>
+
                 <View style={styles.successMessage}>
                   <AppIcon icon="check" size={16} color="#10b981" />
                   <Text style={styles.successText}>
-                    Post-decant metrics captured successfully
+                    Post-decant readings confirmed successfully
                   </Text>
                 </View>
               </>
             )}
           </View>
 
-          {/* Step 4: Confirm Delivery */}
+          {/* Step 5: Confirm Delivery */}
           <View style={styles.card}>
             <View style={styles.stepHeader}>
               <View style={styles.stepIcon}>
                 <AppIcon icon="check" size={16} color="#1e293b" />
               </View>
               <Text style={styles.stepTitle}>
-                Step 4: Confirm Delivered Quantity
+                Step 5: Confirm Delivered Quantity
               </Text>
             </View>
 
@@ -749,30 +962,25 @@ export default function Decanting() {
                 onChangeText={setQty}
                 keyboardType="numeric"
                 placeholder={
-                  step === 3
+                  step === 4
                     ? "Enter delivered quantity (e.g. 998.7)"
                     : "Complete decanting process first"
                 }
                 returnKeyType="done"
                 onFocus={onQtyFocus}
                 onSubmitEditing={onQtySubmit}
-                editable={step === 3}
+                editable={step === 4}
               />
             </View>
 
-            <AppButton
-              title="Push delivery confirmation to SAP"
-              onPress={handlePushToSap}
-              disabled={!canPush || sapPushed}
-              variant={sapPushed ? "success" : canPush ? "primary" : "neutral"}
-              style={{ marginBottom: 12 }}
-            />
+
 
             <View style={styles.ackRow}>
               <AppButton
                 title={opAck ? "Operator Confirmed" : "Operator Acknowledgment"}
-                onPress={() => setOpAck(true)}
-                disabled={ackButtonsDisabled || opAck}
+                onPress={() => acknowledgeOperator.mutate()}
+                disabled={ackButtonsDisabled || opAck || !qty}
+                loading={acknowledgeOperator.isPending}
                 variant={
                   opAck ? "success" : ackButtonsDisabled ? "neutral" : "primary"
                 }
@@ -793,21 +1001,7 @@ export default function Decanting() {
               /> */}
             </View>
 
-            <AppButton
-              title="Confirm & Close STO"
-              onPress={() => {
-                Keyboard.dismiss();
-                confirm.mutate();
-              }}
-              disabled={!canConfirm}
-              loading={confirm.isPending}
-              variant={canConfirm ? "success" : "neutral"}
-            />
-            {confirm.error && (
-              <Text style={styles.errorMessage}>
-                Confirmation error: {confirm.error.message}
-              </Text>
-            )}
+
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

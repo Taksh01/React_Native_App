@@ -120,10 +120,8 @@ export default function SettingsScreen() {
             <Text style={styles.data}>{user?.role ?? "Not signed in"}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.itemLabel}>Mock Mode</Text>
-            <Text style={styles.data}>
-              {CONFIG.MOCK_MODE ? "True" : "False"}
-            </Text>
+            <Text style={styles.label}>Environment</Text>
+            <Text style={styles.value}>Production Backend</Text>
           </View>
           <View style={[styles.infoRow, styles.lastRow]}>
             <Text style={styles.itemLabel}>Device Tokens</Text>

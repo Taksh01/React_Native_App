@@ -11,21 +11,26 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../store/auth";
-import { GTS } from "../../api/client";
+import { apiGetMsTripSchedule } from "../../lib/msApi";
 import AppIcon from "../../components/AppIcon";
 import TripDetailsModal from "../../components/TripDetailsModal";
 import { useThemedStyles } from "../../theme";
 
 const STATUS_COLORS = {
-  FILLING: "#0ea5e9",
-  DISPATCHED: "#2563eb",
-  COMPLETED: "#10b981",
+  PENDING: "#64748b", // Slate 500
+  AT_MS: "#0ea5e9", // Sky 500
+  IN_TRANSIT: "#f59e0b", // Amber 500
+  AT_DBS: "#8b5cf6", // Violet 500
+  DECANTING_CONFIRMED: "#14b8a6", // Teal 500
+  COMPLETED: "#22c55e", // Green 500
+  CANCELLED: "#ef4444", // Red 500
 };
 
 const STATUS_GROUPS = {
-  COMPLETED: ["COMPLETED", "DELIVERED", "CONFIRMED"],
-  DISPATCHED: ["DISPATCHED", "EN_ROUTE"],
-  FILLING: ["PENDING", "SCHEDULED", "ON_HOLD", "LOADING", "IN_PROGRESS"],
+  COMPLETED: ["COMPLETED", "DECANTING_CONFIRMED"],
+  DISPATCHED: ["IN_TRANSIT", "AT_DBS"],
+  FILLING: ["PENDING", "AT_MS"],
+  CANCELLED: ["CANCELLED"],
 };
 
 const categorizeStatus = (status) => {
@@ -36,14 +41,32 @@ const categorizeStatus = (status) => {
   if (STATUS_GROUPS.DISPATCHED.some((value) => normalized.includes(value))) {
     return "DISPATCHED";
   }
+  if (STATUS_GROUPS.CANCELLED.some((value) => normalized.includes(value))) {
+    return "CANCELLED";
+  }
   return "FILLING";
 };
 
 const formatStatusLabel = (status) => {
-  const category = categorizeStatus(status);
-  if (category === "DISPATCHED") return "Dispatched";
-  if (category === "COMPLETED") return "Completed";
-  return "Filling";
+  const normalized = String(status || "").toUpperCase();
+  switch (normalized) {
+    case "PENDING":
+      return "Pending";
+    case "AT_MS":
+      return "At MS";
+    case "IN_TRANSIT":
+      return "In Transit";
+    case "AT_DBS":
+      return "At DBS";
+    case "DECANTING_CONFIRMED":
+      return "Decanting Confirmed";
+    case "COMPLETED":
+      return "Completed";
+    case "CANCELLED":
+      return "Cancelled";
+    default:
+      return "Filling";
+  }
 };
 
 const STATUS_BADGE_COLORS = {
@@ -90,8 +113,10 @@ const groupTrips = (trips = []) => {
     .reverse();
 };
 
-const resolveStatusColor = (status) =>
-  STATUS_COLORS[categorizeStatus(status)] || "#94a3b8";
+const resolveStatusColor = (status) => {
+  const normalized = String(status || "").toUpperCase();
+  return STATUS_COLORS[normalized] || "#94a3b8";
+};
 
 export default function MSDashboard() {
   const { user } = useAuth();
@@ -249,10 +274,9 @@ export default function MSDashboard() {
   );
 
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["msTripSchedule", msId],
-    queryFn: () => GTS.getMsTripSchedule(msId),
+    queryKey: ["msTripSchedule"],
+    queryFn: () => apiGetMsTripSchedule(),
     refetchInterval: 60000,
-    enabled: Boolean(msId),
   });
 
   const handleRefresh = useCallback(() => {
@@ -260,15 +284,6 @@ export default function MSDashboard() {
   }, [refetch]);
 
   const sections = useMemo(() => groupTrips(data?.trips || []), [data?.trips]);
-
-  const summaryCounts = useMemo(() => {
-    const counts = { FILLING: 0, DISPATCHED: 0, COMPLETED: 0 };
-    (data?.trips || []).forEach((trip) => {
-      const category = categorizeStatus(trip.status);
-      counts[category] += 1;
-    });
-    return counts;
-  }, [data?.trips]);
 
   const renderHeader = () => (
     <View style={styles.headerCard}>
@@ -285,15 +300,19 @@ export default function MSDashboard() {
       <View style={styles.summaryGrid}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>In Progress</Text>
-          <Text style={styles.summaryValue}>{summaryCounts.FILLING}</Text>
+          <Text style={styles.summaryValue}>{data?.summary?.filling || 0}</Text>
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Dispatched</Text>
-          <Text style={styles.summaryValue}>{summaryCounts.DISPATCHED}</Text>
+          <Text style={styles.summaryValue}>{data?.summary?.dispatched || 0}</Text>
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Completed</Text>
-          <Text style={styles.summaryValue}>{summaryCounts.COMPLETED}</Text>
+          <Text style={styles.summaryValue}>{data?.summary?.completed || 0}</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Cancelled</Text>
+          <Text style={styles.summaryValue}>{data?.summary?.cancelled || 0}</Text>
         </View>
       </View>
     </View>

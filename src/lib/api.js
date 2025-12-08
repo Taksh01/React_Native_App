@@ -1,201 +1,316 @@
 /**
- * API Client wrapper.
- *
- * Toggle USE_MOCK_API = true to use the local mock implementation.
- * Later, flip to false and implement real HTTP calls (axios/fetch) with the same function signatures.
+ * API Client - Real Backend Integration with Error Handling
  */
-import { mockLogin, mockChooseRole } from "../api/mock";
 import { CONFIG } from "../config";
+import { useAuth } from "../store/auth";
 
-export const USE_MOCK_API = CONFIG.MOCK_MODE === true;
-
-// AUTH
-export async function apiLogin(credentials) {
-  if (USE_MOCK_API) return mockLogin(credentials);
-
-  const response = await fetch(`${CONFIG.API_BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(credentials),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Login failed");
+// API Error Types
+export class ApiError extends Error {
+  constructor(message, status, data = null) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.data = data;
   }
-
-  return response.json();
 }
 
-export async function apiChooseRole(role) {
-  if (USE_MOCK_API) return mockChooseRole(role);
+// Helper function for making API calls with error handling
+async function makeApiCall(url, options = {}) {
+  const { token } = useAuth.getState();
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+
+  const defaultHeaders = {
+    "Content-Type": "application/json",
+  };
+
+  // Add Authorization header if token exists
+  if (token) {
+    defaultHeaders["Authorization"] = `Token ${token}`;
+
+  } else {
+    console.warn(
+      "[API] No token available - request will be sent without authentication"
+    );
+  }
+
+  const defaultOptions = {
+    method: "GET",
+    headers: defaultHeaders,
+    timeout: 10000,
+    ...options,
+    // Merge headers properly to avoid overwriting Authorization
+    headers: {
+      ...defaultHeaders,
+      ...options.headers,
+    },
+  };
 
   try {
-    const response = await fetch(`${CONFIG.API_BASE_URL}/auth/choose-role`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role }),
+
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      defaultOptions.timeout
+    );
+
+    const response = await fetch(url, {
+      ...defaultOptions,
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
-    return response.json();
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error.name === "AbortError") {
-      throw new Error("Request timeout");
+
+
+
+    // Handle different HTTP status codes
+    if (response.status === 404) {
+      throw new ApiError("Resource not found", 404);
     }
-    throw error;
+
+    if (response.status === 401) {
+      throw new ApiError("Invalid credentials", 401);
+    }
+
+    if (response.status === 403) {
+      throw new ApiError("Access denied", 403);
+    }
+
+    if (response.status >= 500) {
+      throw new ApiError(
+        "Server error. Please try again later",
+        response.status
+      );
+    }
+
+    if (!response.ok) {
+      let errorMessage = "Request failed";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {
+        // If can't parse error JSON, use default message
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+
+    // Handle empty responses
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      return { success: true, message: "Operation completed successfully" };
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new ApiError("Request timeout. Please check your connection", 408);
+    }
+
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    // Network errors
+    if (error.message.includes("Network request failed")) {
+      throw new ApiError(
+        "Unable to connect to server. Please check your internet connection",
+        0
+      );
+    }
+
+    if (error.message.includes("fetch")) {
+      throw new ApiError("Connection failed. Please try again", 0);
+    }
+
+    // Unknown errors
+
+    throw new ApiError(
+      "An unexpected error occurred. Please try again",
+      0,
+      error
+    );
+  }
+}
+
+// AUTH
+export async function apiLogin(credentials) {
+  try {
+    const response = await makeApiCall(
+      `${CONFIG.API_BASE_URL}/api/auth/login/`,
+      {
+        method: "POST",
+        body: JSON.stringify(credentials),
+      }
+    );
+
+    // Validate response structure
+    if (!response || !response.user || !response.token) {
+      throw new ApiError("Invalid login response format", 422);
+    }
+
+    return response;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError("Login failed. Please try again", 0, error);
+  }
+}
+
+export async function apiChooseRole(role) {
+  try {
+    return await makeApiCall(`${CONFIG.API_BASE_URL}/auth/choose-role`, {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError("Failed to select role. Please try again", 0, error);
   }
 }
 
 // NOTIFICATIONS - Driver
+// Note: userId param kept for backward compatibility but not sent to backend
+// Backend identifies user from JWT in Authorization header
 export async function apiRegisterDriverToken(userId, deviceToken) {
-  const response = await fetch(
-    `${CONFIG.API_BASE_URL}/driver/notifications/register`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, deviceToken }),
+  try {
+    return await makeApiCall(
+      `${CONFIG.API_BASE_URL}/api/notifications/register-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ deviceToken }),
+      }
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
     }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Failed to register device token");
+    throw new ApiError("Failed to register device token", 0, error);
   }
-
-  return response.json();
 }
 
 export async function apiUnregisterDriverToken(userId, deviceToken) {
-  const response = await fetch(
-    `${CONFIG.API_BASE_URL}/driver/notifications/unregister`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, deviceToken }),
+  try {
+    return await makeApiCall(
+      `${CONFIG.API_BASE_URL}/api/notifications/unregister-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ deviceToken }),
+      }
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
     }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Failed to unregister device token");
+    throw new ApiError("Failed to unregister device token", 0, error);
   }
-
-  return response.json();
 }
 
 // NOTIFICATIONS - DBS
 export async function apiRegisterDBSToken(userId, deviceToken) {
-  const response = await fetch(
-    `${CONFIG.API_BASE_URL}/dbs/notifications/register`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, deviceToken }),
+  try {
+    return await makeApiCall(
+      `${CONFIG.API_BASE_URL}/api/notifications/register-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ deviceToken }),
+      }
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
     }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Failed to register DBS device token");
+    throw new ApiError("Failed to register DBS device token", 0, error);
   }
-
-  return response.json();
 }
 
 export async function apiUnregisterDBSToken(userId, deviceToken) {
-  const response = await fetch(
-    `${CONFIG.API_BASE_URL}/dbs/notifications/unregister`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, deviceToken }),
+  try {
+    return await makeApiCall(
+      `${CONFIG.API_BASE_URL}/api/notifications/unregister-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ deviceToken }),
+      }
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
     }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Failed to unregister DBS device token");
+    throw new ApiError("Failed to unregister DBS device token", 0, error);
   }
-
-  return response.json();
 }
 
 // NOTIFICATIONS - MS
 export async function apiRegisterMSToken(userId, deviceToken) {
-  const response = await fetch(
-    `${CONFIG.API_BASE_URL}/ms/notifications/register`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, deviceToken }),
+  try {
+    return await makeApiCall(
+      `${CONFIG.API_BASE_URL}/api/notifications/register-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ deviceToken }),
+      }
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
     }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Failed to register MS device token");
+    throw new ApiError("Failed to register MS device token", 0, error);
   }
-
-  return response.json();
 }
 
 export async function apiUnregisterMSToken(userId, deviceToken) {
-  const response = await fetch(
-    `${CONFIG.API_BASE_URL}/ms/notifications/unregister`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, deviceToken }),
+  try {
+    return await makeApiCall(
+      `${CONFIG.API_BASE_URL}/api/notifications/unregister-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ deviceToken }),
+      }
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
     }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Failed to unregister MS device token");
+    throw new ApiError("Failed to unregister MS device token", 0, error);
   }
-
-  return response.json();
 }
 
 // NOTIFICATIONS - EIC
 export async function apiRegisterEICToken(userId, deviceToken) {
-  const response = await fetch(
-    `${CONFIG.API_BASE_URL}/eic/notifications/register`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, deviceToken }),
+  try {
+    return await makeApiCall(
+      `${CONFIG.API_BASE_URL}/api/notifications/register-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ deviceToken }),
+      }
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
     }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Failed to register EIC device token");
+    throw new ApiError("Failed to register EIC device token", 0, error);
   }
-
-  return response.json();
 }
 
 export async function apiUnregisterEICToken(userId, deviceToken) {
-  const response = await fetch(
-    `${CONFIG.API_BASE_URL}/eic/notifications/unregister`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, deviceToken }),
+  try {
+    return await makeApiCall(
+      `${CONFIG.API_BASE_URL}/api/notifications/unregister-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ deviceToken }),
+      }
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
     }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Failed to unregister EIC device token");
+    throw new ApiError("Failed to unregister EIC device token", 0, error);
   }
-
-  return response.json();
 }

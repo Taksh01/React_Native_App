@@ -22,35 +22,11 @@ export default function MapView({
   const [routeInfo, setRouteInfo] = useState(null);
 
   useEffect(() => {
-    // Simulate loading map and calculating route
-    const timer = setTimeout(() => {
-      setRouteInfo({
-        distance: "15.2 km",
-        duration: "25 mins",
-        traffic: "Light traffic",
-      });
-      setIsLoading(false);
-    }, 2000);
-
-    return () => clearTimeout(timer);
+    // In a real app, we would calculate route here
+    setIsLoading(false);
   }, [destination]);
 
-  // Simulate location updates
-  useEffect(() => {
-    if (!isLoading && onLocationUpdate) {
-      const locationTimer = setInterval(() => {
-        // Mock location update
-        const mockLocation = {
-          latitude: 12.9716 + (Math.random() - 0.5) * 0.01,
-          longitude: 77.5946 + (Math.random() - 0.5) * 0.01,
-          timestamp: Date.now(),
-        };
-        onLocationUpdate(mockLocation);
-      }, 5000); // Update every 5 seconds
-
-      return () => clearInterval(locationTimer);
-    }
-  }, [isLoading, onLocationUpdate]);
+  // Real location updates should be handled by a location service hook in the parent component
 
   if (isLoading) {
     return (

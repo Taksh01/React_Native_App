@@ -15,6 +15,10 @@ import { driverApi } from "../../lib/driverApi";
 import { useThemedStyles } from "../../theme";
 import AppIcon from "../../components/AppIcon";
 import AppButton from "../../components/AppButton";
+import {
+  getTripStatusColor,
+  getTripStatusLabel,
+} from "../../config/tripStatus";
 
 function formatDateHeader(iso) {
   try {
@@ -149,146 +153,7 @@ export default function TripHistory({ navigation }) {
     } catch (err) {
       console.warn("Trip history fetch failed", err?.message || err);
       setError(err?.message || "Failed to load trips");
-      // fallback: create some mock trips to avoid blank screen in demos
-      setTrips([
-        {
-          tripId: "TRIP-101",
-          status: "COMPLETED",
-          completedAt: new Date(
-            Date.now() - 2 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "Vastral MS" },
-          dbsLocation: { name: "Mehsana DBS" },
-          deliveredQty: 1250,
-        },
-        {
-          tripId: "TRIP-202",
-          status: "COMPLETED",
-          completedAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-          msLocation: { name: "Vastral MS" },
-          dbsLocation: { name: "Mehsana DBS" },
-          deliveredQty: 980,
-        },
-      ]);
-      // fallback: create a larger set of mock trips for demos
-      setTrips([
-        {
-          tripId: "TRIP-20251112-06",
-          status: "ACTIVE",
-          completedAt: new Date().toISOString(),
-          msLocation: { name: "Vastral MS" },
-          dbsLocation: { name: "Mehsana DBS" },
-          deliveredQty: 1250,
-        },
-        {
-          tripId: "TRIP-20251112-02",
-          status: "COMPLETED",
-          completedAt: new Date(
-            Date.now() - 1 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "Vastral MS" },
-          dbsLocation: { name: "Mehsana DBS" },
-          deliveredQty: 980,
-        },
-        {
-          tripId: "TRIP-20251111-03",
-          status: "COMPLETED",
-          completedAt: new Date(
-            Date.now() - 2 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "Vastral MS" },
-          dbsLocation: { name: "Mehsana DBS" },
-          deliveredQty: 1120,
-        },
-        {
-          tripId: "TRIP-20251109-04",
-          status: "CANCELLED",
-          completedAt: new Date(
-            Date.now() - 4 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "MS Station Gamma" },
-          dbsLocation: { name: "DBS Station Omega" },
-          deliveredQty: 0,
-        },
-        {
-          tripId: "TRIP-20251108-05",
-          status: "COMPLETED",
-          completedAt: new Date(
-            Date.now() - 5 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "Vastral MS" },
-          dbsLocation: { name: "Mehsana DBS" },
-          deliveredQty: 760,
-        },
-        {
-          tripId: "TRIP-20251106-06",
-          status: "COMPLETED",
-          completedAt: new Date(
-            Date.now() - 7 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "MS Station Mu" },
-          dbsLocation: { name: "DBS Station Nu" },
-          deliveredQty: 1430,
-        },
-        {
-          tripId: "TRIP-20251030-07",
-          status: "COMPLETED",
-          completedAt: new Date(
-            Date.now() - 14 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "Vastral MS" },
-          dbsLocation: { name: "Mehsana DBS" },
-          deliveredQty: 640,
-        },
-        {
-          tripId: "TRIP-20251023-08",
-          status: "COMPLETED",
-          acceptedAt: new Date(
-            Date.now() - 21 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "MS Station Rho" },
-          dbsLocation: { name: "DBS Station Phi" },
-          deliveredQty: 500,
-        },
-        {
-          tripId: "TRIP-20251018-09",
-          status: "CANCELLED",
-          createdAt: new Date(Date.now() - 26 * 24 * 3600 * 1000).toISOString(),
-          msLocation: { name: "Vastral MS" },
-          dbsLocation: { name: "Mehsana DBS" },
-          deliveredQty: 0,
-        },
-        {
-          tripId: "TRIP-20251013-10",
-          status: "COMPLETED",
-          completedAt: new Date(
-            Date.now() - 31 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "MS Station Omicron" },
-          dbsLocation: { name: "DBS Station Pi" },
-          deliveredQty: 990,
-        },
-        {
-          tripId: "TRIP-20251005-11",
-          status: "FAILED",
-          completedAt: new Date(
-            Date.now() - 39 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "Vastral MS" },
-          dbsLocation: { name: "Mehsana DBS" },
-          deliveredQty: 0,
-        },
-        {
-          tripId: "TRIP-20250928-12",
-          status: "COMPLETED",
-          completedAt: new Date(
-            Date.now() - 46 * 24 * 3600 * 1000
-          ).toISOString(),
-          msLocation: { name: "MS Station Alpha" },
-          dbsLocation: { name: "DBS Station Beta" },
-          deliveredQty: 1200,
-        },
-      ]);
+      setTrips([]);
     } finally {
       setLoading(false);
     }
@@ -328,16 +193,7 @@ export default function TripHistory({ navigation }) {
     return groupTripsByDate(flat);
   }, [trips, filter, query]);
 
-  const statusColor = (status) => {
-    const s = (status || "").toUpperCase();
-    if (s === "COMPLETED" || s === "SUCCESS")
-      return themeRef.current?.colors?.success || "#16a34a";
-    if (s === "CANCELLED" || s === "FAILED")
-      return themeRef.current?.colors?.danger || "#ef4444";
-    if (s === "ASSIGNED" || s === "ACCEPTED" || s === "ACTIVE")
-      return themeRef.current?.colors?.primary || "#2563eb";
-    return themeRef.current?.colors?.info || "#0ea5e9";
-  };
+
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
@@ -365,11 +221,11 @@ export default function TripHistory({ navigation }) {
           <View
             style={[
               styles.statusBadge,
-              { backgroundColor: statusColor(item.status) },
+              { backgroundColor: getTripStatusColor(item.status) },
             ]}
           >
             <Text style={styles.statusText}>
-              {(item.status || "").toUpperCase()}
+              {getTripStatusLabel(item.status)}
             </Text>
           </View>
           {/* <Text style={[styles.tripMeta, { marginTop: 6 }]}>

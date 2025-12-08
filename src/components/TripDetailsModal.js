@@ -229,7 +229,7 @@ export default function TripDetailsModal({ visible, trip, onClose }) {
       return null;
     }
     if (typeof value === "number") {
-      return `${value.toLocaleString("en-IN")} L`;
+      return `${value.toLocaleString("en-IN")}`;
     }
     const trimmed = String(value).trim();
     if (trimmed.length === 0) {
@@ -240,7 +240,7 @@ export default function TripDetailsModal({ visible, trip, onClose }) {
     }
     const numeric = Number(trimmed);
     if (!Number.isNaN(numeric)) {
-      return `${numeric.toLocaleString("en-IN")} L`;
+      return `${numeric.toLocaleString("en-IN")}`;
     }
     return trimmed;
   };

@@ -1,27 +1,354 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   View,
   Text,
-  ActivityIndicator,
-  Alert,
   StyleSheet,
+  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
+  ActivityIndicator,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../../store/auth";
-import { useRoute } from "@react-navigation/native";
+import { useMutation } from "@tanstack/react-query";
+import { useRoute, useFocusEffect } from "@react-navigation/native";
+import {
+  apiSignalArrival,
+  apiStartDecant,
+  apiEndDecant,
+  apiOperatorAcknowledge,
+} from "../../lib/msApi";
 import NotificationService from "../../services/NotificationService";
-import { msApi } from "../../lib/msApi";
 import AppIcon from "../../components/AppIcon";
-import AppTextField from "../../components/AppTextField";
 import AppButton from "../../components/AppButton";
+import AppTextField from "../../components/AppTextField";
 import { useThemedStyles } from "../../theme";
 
+// Step legend:
+// 0 = Simulate Arrival (Wait for Notif)
+// 1 = Confirm Truck Arrival (Visual Check)
+// 2 = Enter Pre-Fill Readings & Start
+// 3 = Enter Post-Fill Readings & End
+// 4 = Confirm & Close
+const STORAGE_KEY = "@ms_operations_state";
+
 export default function MSOperations() {
-  const { user } = useAuth();
   const route = useRoute();
+  const [step, setStep] = useState(0);
+  const [qty, setQty] = useState("");
+  const [truckNumber, setTruckNumber] = useState("");
+  const [preReadings, setPreReadings] = useState({
+    pressure: "",
+    mfm: "",
+  });
+  const [postReadings, setPostReadings] = useState({
+    pressure: "",
+    mfm: "",
+  });
+  const [opAck, setOpAck] = useState(false);
+
+  const [tripToken, setTripToken] = useState(null);
+  const [tripId, setTripId] = useState(null);
+  const [tokenLoading, setTokenLoading] = useState(false);
+  const [arrivalGate, setArrivalGate] = useState({
+    allowed: false,
+    forTrip: null,
+  });
+  const [notifAssignment, setNotifAssignment] = useState({
+    tripId: null,
+    driverId: null,
+    truckNumber: null,
+    tripToken: null,
+  });
+  const [isStateLoaded, setIsStateLoaded] = useState(false);
+
+  // refs for keyboard/scroll
+  const scrollRef = useRef(null);
+
+  // Subscribe to ms_arrival emitter to set assignment when opened from notification
+  useEffect(() => {
+    const off = NotificationService.addListener("ms_arrival", (data) => {
+      if (!data?.tripId || !data?.driverId) return;
+      setNotifAssignment({
+        tripId: data.tripId,
+        driverId: data.driverId,
+        truckNumber: data.truckNumber,
+        tripToken: data.tripToken,
+      });
+    });
+    return () => off && off();
+  }, []);
+
+  // Persistence: Load State
+  useEffect(() => {
+    const loadState = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const state = JSON.parse(saved);
+          // Only restore if we are not already deep-linked (route params take precedence)
+          if (!route?.params?.tripId) {
+            if (state.step !== undefined) setStep(state.step);
+            if (state.tripId) setTripId(state.tripId);
+            if (state.tripToken) setTripToken(state.tripToken);
+            if (state.arrivalGate) setArrivalGate(state.arrivalGate);
+            if (state.notifAssignment) setNotifAssignment(state.notifAssignment);
+            if (state.truckNumber) setTruckNumber(state.truckNumber);
+            if (state.preReadings) setPreReadings(state.preReadings);
+            if (state.postReadings) setPostReadings(state.postReadings);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load MS state", e);
+      } finally {
+        setIsStateLoaded(true);
+      }
+    };
+    loadState();
+  }, []);
+
+  // Persistence: Save State
+  useEffect(() => {
+    if (!isStateLoaded) return;
+
+    const saveState = async () => {
+      // Only save if we have an active session (gate allowed or step > 0)
+      if (arrivalGate.allowed || step > 0) {
+        const state = {
+          step,
+          tripId,
+          tripToken,
+          arrivalGate,
+          notifAssignment,
+          truckNumber,
+          preReadings,
+          postReadings,
+        };
+        try {
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {
+          console.warn("Failed to save MS state", e);
+        }
+      }
+    };
+    saveState();
+  }, [
+    isStateLoaded,
+    step,
+    tripId,
+    tripToken,
+    arrivalGate,
+    notifAssignment,
+    truckNumber,
+    preReadings,
+    postReadings,
+  ]);
+
+  // Compute effective assigned ids
+  const assignedTripId = route?.params?.tripId || null;
+  const assignedDriverId = route?.params?.driverId || null;
+  const effectiveAssignedTripId =
+    assignedTripId || notifAssignment.tripId;
+  const effectiveAssignedDriverId =
+    assignedDriverId || notifAssignment.driverId;
+
+  // Just-in-time token retrieval from notification assignment
+  useEffect(() => {
+    // If we have a token from notification, use it directly
+    if (notifAssignment.tripToken) {
+      setTripToken(notifAssignment.tripToken);
+      setTripId(effectiveAssignedTripId);
+      setArrivalGate({
+        allowed: true,
+        forTrip: effectiveAssignedTripId,
+      });
+      setTokenLoading(false);
+    } else {
+      // If no token in notification, we cannot proceed.
+      // User must wait for a valid notification.
+      if (effectiveAssignedTripId && !tripToken) {
+         console.log("Waiting for notification with token...");
+      }
+    }
+  }, [notifAssignment, effectiveAssignedTripId]);
+
+  // When opened from notification with type=ms_arrival
+  useEffect(() => {
+    const notifTripId =
+      route?.params?.type === "ms_arrival" ? route?.params?.tripId : null;
+    if (notifTripId) {
+      setArrivalGate({ allowed: true, forTrip: notifTripId });
+      if (!tripId) setTripId(notifTripId);
+      Alert.alert(
+        "Truck arrived",
+        `Truck for trip ${notifTripId} reached your MS.`
+      );
+    }
+    if (!notifTripId) {
+      const last = NotificationService.getLastEvent("ms_arrival");
+      if (last?.tripId) {
+        setArrivalGate({ allowed: true, forTrip: last.tripId });
+        if (!tripId) setTripId(last.tripId);
+        if (last.truckNumber) {
+          setNotifAssignment((prev) => ({
+            ...prev,
+            truckNumber: last.truckNumber,
+          }));
+        }
+        if (last.tripToken) {
+          setNotifAssignment((prev) => ({
+            ...prev,
+            tripToken: last.tripToken,
+          }));
+        }
+      }
+    }
+  }, [route?.params?.type, route?.params?.tripId, tripId]);
+
+  // On focus
+  useFocusEffect(
+    React.useCallback(() => {
+      try {
+        try {
+          NotificationService.flushPendingIntents?.();
+        } catch (_error) {}
+        const notifTripId =
+          route?.params?.type === "ms_arrival" ? route?.params?.tripId : null;
+        if (notifTripId && route?.params?.driverId) {
+          setNotifAssignment({
+            tripId: notifTripId,
+            driverId: route.params.driverId,
+            truckNumber: route.params.truckNumber,
+            tripToken: route.params.tripToken,
+          });
+        }
+      } catch (_error) {}
+    }, [route?.params, tripId])
+  );
+
+  // Dev helper
+  const simulateDevArrival = () => {
+    const mockTripId = "TRIP-MS-001";
+    const mockTruck = "KA-01-MS-999";
+    const mockToken = "2573";
+    
+    setTripId(mockTripId);
+    setTripToken(mockToken);
+    setArrivalGate({ allowed: true, forTrip: mockTripId });
+    setNotifAssignment({
+      tripId: mockTripId,
+      driverId: "MOCK-DRIVER",
+      truckNumber: mockTruck,
+      tripToken: mockToken,
+    });
+    Alert.alert(
+      "Dev Mode",
+      `Simulated arrival for ${mockTripId}`
+    );
+  };
+
+  // Mutations
+  const signalArrival = useMutation({
+    mutationFn: () => apiSignalArrival(tripToken),
+    onSuccess: (data) => {
+      if (notifAssignment.truckNumber) {
+        setTruckNumber(notifAssignment.truckNumber);
+      }
+      setStep(2);
+      setTripId(data.trip?.id || tripId);
+      Alert.alert(
+        "Arrival Confirmed",
+        "Truck confirmed. Proceed to pre-fill readings."
+      );
+    },
+  });
+
+  const confirmPreReadings = useMutation({
+    mutationFn: () => apiStartDecant(tripToken, preReadings),
+    onSuccess: () => {
+      Alert.alert(
+        "Pre-readings Confirmed",
+        "Filling process started. Proceed when ready to take post readings."
+      );
+      setStep(3);
+    },
+  });
+
+  const confirmPostReadings = useMutation({
+    mutationFn: () => apiEndDecant(tripToken, postReadings),
+    onSuccess: () => {
+      Alert.alert(
+        "Post-readings Confirmed",
+        "Filling process completed. Proceed to confirm."
+      );
+      setStep(4);
+    },
+  });
+
+  const acknowledgeOperator = useMutation({
+    mutationFn: () => apiOperatorAcknowledge(tripToken, qty),
+    onSuccess: () => {
+      setOpAck(true);
+      Keyboard.dismiss();
+      Alert.alert(
+        "Operation Completed",
+        "Filling confirmed successfully.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Reset flow
+              setQty("");
+              setOpAck(false);
+              setStep(0);
+              setTruckNumber("");
+              setTripId(null);
+              setTripToken(null);
+              setArrivalGate({ allowed: false, forTrip: null });
+              setNotifAssignment({
+                tripId: null,
+                driverId: null,
+                truckNumber: null,
+                tripToken: null,
+              });
+              setPreReadings({ pressure: "", mfm: "" });
+              setPostReadings({ pressure: "", mfm: "" });
+              signalArrival.reset();
+              confirmPreReadings.reset();
+              confirmPostReadings.reset();
+              acknowledgeOperator.reset();
+              
+              AsyncStorage.removeItem(STORAGE_KEY).catch((e) =>
+                console.warn("Failed to clear state", e)
+              );
+            }
+          }
+        ]
+      );
+    },
+  });
+
+  // Gating
+  const canSimulate = (() => {
+    if (step !== 0 || signalArrival.isPending) return false;
+    if (!tripToken || !arrivalGate.allowed) return false;
+    if (arrivalGate.forTrip && tripId) return arrivalGate.forTrip === tripId;
+    return true;
+  })();
+
+  const canConfirmPre =
+    step === 2 &&
+    !confirmPreReadings.isPending &&
+    preReadings.pressure.trim() !== "" &&
+    preReadings.mfm.trim() !== "";
+
+  const canConfirmPost =
+    step === 3 &&
+    !confirmPostReadings.isPending &&
+    postReadings.pressure.trim() !== "" &&
+    postReadings.mfm.trim() !== "";
 
   const styles = useThemedStyles((theme) =>
     StyleSheet.create({
@@ -35,31 +362,12 @@ export default function MSOperations() {
         paddingTop: theme.spacing(2),
         paddingBottom: theme.spacing(6),
       },
-      header: {
-        marginBottom: theme.spacing(6),
-      },
-      title: {
-        fontSize: theme.typography.sizes.heading,
-        fontWeight: theme.typography.weightBold,
-        color: theme.colors.textPrimary,
-        lineHeight: theme.typography.lineHeights.heading,
-        marginBottom: theme.spacing(1),
-      },
-      subtitle: {
-        fontSize: theme.typography.sizes.body,
-        color: theme.colors.textSecondary,
-        lineHeight: theme.typography.lineHeights.body,
-      },
       card: {
         backgroundColor: theme.colors.surfaceElevated,
         borderRadius: theme.radii.lg,
         padding: theme.spacing(4),
         marginBottom: theme.spacing(4),
         ...theme.shadows.level1,
-      },
-      disabledCard: {
-        opacity: 0.6,
-        backgroundColor: theme.colors.surfaceMuted,
       },
       stepHeader: {
         flexDirection: "row",
@@ -79,27 +387,12 @@ export default function MSOperations() {
         fontSize: theme.typography.sizes.bodyLarge,
         fontWeight: theme.typography.weightSemiBold,
         color: theme.colors.textPrimary,
-        lineHeight: theme.typography.lineHeights.bodyLarge,
         flex: 1,
       },
-      disabledText: {
-        color: theme.colors.textMuted,
-      },
-      inputGroup: {
-        marginBottom: theme.spacing(4),
-      },
-      inputLabel: {
+      stepDescription: {
         fontSize: theme.typography.sizes.body,
-        fontWeight: theme.typography.weightMedium,
-        color: theme.colors.textPrimary,
-        marginBottom: theme.spacing(2),
-      },
-      disabledMessage: {
-        fontSize: theme.typography.sizes.body,
-        color: theme.colors.textMuted,
-        fontStyle: "italic",
-        marginTop: theme.spacing(2),
-        lineHeight: theme.typography.lineHeights.body,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing(3),
       },
       tokenStatus: {
         backgroundColor: theme.colors.surfaceElevated,
@@ -150,599 +443,301 @@ export default function MSOperations() {
         fontSize: theme.typography.sizes.caption,
         color: theme.colors.warning,
         fontStyle: "italic",
-        lineHeight: theme.typography.lineHeights.caption,
       },
-      sessionInfo: {
-        backgroundColor: theme.colors.surfaceElevated,
-        borderRadius: theme.radii.lg,
-        padding: theme.spacing(4),
-        marginTop: theme.spacing(4),
-        ...theme.shadows.level1,
+      statusMessage: {
+        fontSize: theme.typography.sizes.body,
+        color: theme.colors.textMuted,
+        fontStyle: "italic",
+        marginVertical: theme.spacing(2),
       },
-      sessionHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: theme.spacing(2),
+      inputGroup: {
+        marginBottom: theme.spacing(4),
       },
-      sessionIcon: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: "#e0f2fe",
-        alignItems: "center",
-        justifyContent: "center",
-        marginRight: theme.spacing(2),
-      },
-      sessionText: {
+      inputLabel: {
         fontSize: theme.typography.sizes.body,
         fontWeight: theme.typography.weightMedium,
         color: theme.colors.textPrimary,
+        marginBottom: theme.spacing(2),
       },
-      sessionSubtext: {
+      devSection: {
+        backgroundColor: theme.colors.surfaceMuted,
+        borderRadius: theme.radii.md,
+        padding: theme.spacing(3),
+        marginTop: theme.spacing(2),
+        borderWidth: 1,
+        borderColor: theme.colors.warning,
+      },
+      devTitle: {
+        fontSize: theme.typography.sizes.body,
+        fontWeight: theme.typography.weightSemiBold,
+        color: theme.colors.warning,
+        marginBottom: theme.spacing(2),
+      },
+      devText: {
         fontSize: theme.typography.sizes.body,
         color: theme.colors.textSecondary,
-        marginTop: theme.spacing(1),
+        marginBottom: theme.spacing(3),
       },
     })
   );
-  const assignedTripId = route?.params?.tripId || null;
-  const assignedDriverId = route?.params?.driverId || null;
-  // !const fromNotification = route?.params?.fromNotification || false;
 
-  // State for form inputs
-  const [truckNumber, setTruckNumber] = useState("");
-  const [preReading, setPreReading] = useState("");
-  const [postReading, setPostReading] = useState("");
-
-  // State for flow control
-  const [step, setStep] = useState(1); // 1: arrival, 2: pre, 3: post, 4: confirm
-  const [sessionId, setSessionId] = useState(null);
-  const [currentToken, setCurrentToken] = useState(null);
-  const [tripId, setTripId] = useState(null);
-  const [devAssignmentEnabled, setDevAssignmentEnabled] = useState(false);
-  const [notifAssignment, setNotifAssignment] = useState({
-    tripId: null,
-    driverId: null,
-  });
-
-  // Loading states
-  const [loading, setLoading] = useState({
-    token: false,
-    arrival: false,
-    pre: false,
-    post: false,
-    confirm: false,
-  });
-
-  const setStepLoading = (stepName, isLoading) => {
-    setLoading((prev) => ({ ...prev, [stepName]: isLoading }));
-  };
-
-  // Subscribe to ms_arrival emitter to set assignment when opened from notification
-  useEffect(() => {
-    const off = NotificationService.addListener("ms_arrival", (data) => {
-      if (!data?.tripId || !data?.driverId) return;
-      setNotifAssignment({ tripId: data.tripId, driverId: data.driverId });
-    });
-    return () => off && off();
-  }, []);
-
-  // Compute effective assignment early so hooks below can use them safely
-  const effectiveAssignedTripId =
-    assignedTripId ||
-    notifAssignment.tripId ||
-    (devAssignmentEnabled ? "DEV-TRIP" : null);
-  const effectiveAssignedDriverId =
-    assignedDriverId ||
-    notifAssignment.driverId ||
-    (devAssignmentEnabled ? "DEV-DRIVER" : null);
-
-  // Just-in-time token retrieval when an assignment exists (from notification or queue)
-  useEffect(() => {
-    let cancelled = false;
-    const getToken = async () => {
-      if (user?.role !== "MS_OPERATOR") return;
-      if (!effectiveAssignedDriverId || !effectiveAssignedTripId) return; // only when assigned (notification or dev)
-      setStepLoading("token", true);
-      // In Expo Go or when dev assignment is enabled, create a mock token immediately
-      if (
-        NotificationService.areNotificationsLimited() ||
-        devAssignmentEnabled
-      ) {
-        if (cancelled) return;
-        const mockToken = `MOCK-MS-${effectiveAssignedTripId}-${effectiveAssignedDriverId}-${Date.now()}`;
-        setCurrentToken(mockToken);
-        setTripId(effectiveAssignedTripId);
-        setStepLoading("token", false);
-        return;
-      }
-      try {
-        // Verify that driver has an existing token (driver must have accepted trip first)
-        const driverTokenResponse = await msApi.getDriverToken(
-          effectiveAssignedDriverId
-        );
-        if (cancelled) return;
-        setCurrentToken(driverTokenResponse.token);
-        setTripId(driverTokenResponse.tripId || effectiveAssignedTripId);
-        console.log("✅ Verified driver token for assigned trip");
-      } catch (error) {
-        // Token doesn't exist - driver hasn't accepted trip yet or there's an issue
-        if (!cancelled) {
-          console.warn("⚠️ No token found for driver - trip not accepted yet");
-          Alert.alert(
-            "Token Not Found",
-            "Driver hasn't accepted this trip yet. Please ask the driver to accept the trip first, or wait for them to arrive at the MS station.",
-            [{ text: "OK" }]
-          );
-          setCurrentToken(null);
-          setTripId(null);
-        }
-      } finally {
-        if (!cancelled) setStepLoading("token", false);
-      }
-    };
-    getToken();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    user,
-    effectiveAssignedDriverId,
-    effectiveAssignedTripId,
-    devAssignmentEnabled,
-  ]);
-
-  // ! CLEAR
-  // API call for truck arrival confirmation
-  const confirmTruckArrival = async () => {
-    if (!truckNumber.trim()) {
-      Alert.alert("Error", "Please enter truck number");
-      return;
-    }
-
-    if (!effectiveAssignedTripId || !effectiveAssignedDriverId) {
-      Alert.alert(
-        "Waiting for assignment",
-        "This action will be enabled after you receive an arrival notification."
-      );
-      return;
-    }
-
-    if (!currentToken) {
-      Alert.alert(
-        "Error",
-        "No active token for assigned trip. Please wait for token setup."
-      );
-      return;
-    }
-
-    // If running with a mock token or limited notifications, simulate success locally
-    if (
-      currentToken?.startsWith("MOCK-") ||
-      NotificationService.areNotificationsLimited()
-    ) {
-      setStepLoading("arrival", true);
-      setTimeout(() => {
-        const fakeSession = `DEV-${effectiveAssignedTripId}-${Date.now()}`;
-        setSessionId(fakeSession);
-        setStep(2);
-        setStepLoading("arrival", false);
-        Alert.alert(
-          "Success",
-          `Truck arrival confirmed for Trip ${
-            tripId || effectiveAssignedTripId
-          }!`
-        );
-      }, 300);
-      return;
-    }
-
-    setStepLoading("arrival", true);
-    try {
-      const data = await msApi.confirmArrival({
-        token: currentToken,
-        truckNumber: truckNumber.trim(),
-        operatorId: user?.id,
-      });
-
-      setSessionId(data.sessionId);
-      setStep(2);
-      Alert.alert(
-        "Success",
-        `Truck arrival confirmed for Trip ${data.tripId}!`
-      );
-    } catch (error) {
-      Alert.alert("Error", error.message || "Network error occurred");
-    } finally {
-      setStepLoading("arrival", false);
-    }
-  };
-
-  // ! CLEAR
-  // API call for pre meter reading
-  const submitPreReading = async () => {
-    if (!preReading.trim() || isNaN(preReading)) {
-      Alert.alert("Error", "Please enter valid pre meter reading");
-      return;
-    }
-
-    // Simulate in dev/mock mode
-    if (sessionId?.startsWith("DEV-") || currentToken?.startsWith("MOCK-")) {
-      setStepLoading("pre", true);
-      setTimeout(() => {
-        setStep(3);
-        setStepLoading("pre", false);
-        Alert.alert("Success", "Pre meter reading saved!");
-      }, 200);
-      return;
-    }
-
-    setStepLoading("pre", true);
-    try {
-      await msApi.submitPreReading({
-        sessionId,
-        reading: parseFloat(preReading),
-      });
-
-      setStep(3);
-      Alert.alert("Success", "Pre meter reading saved!");
-    } catch (error) {
-      Alert.alert("Error", error.message || "Network error occurred");
-    } finally {
-      setStepLoading("pre", false);
-    }
-  };
-
-  // ! CLEAR
-  // API call for post meter reading
-  const submitPostReading = async () => {
-    if (!postReading.trim() || isNaN(postReading)) {
-      Alert.alert("Error", "Please enter valid post meter reading");
-      return;
-    }
-
-    // Simulate in dev/mock mode
-    if (sessionId?.startsWith("DEV-") || currentToken?.startsWith("MOCK-")) {
-      setStepLoading("post", true);
-      setTimeout(() => {
-        setStep(4);
-        setStepLoading("post", false);
-        Alert.alert("Success", "Post meter reading saved!");
-      }, 200);
-      return;
-    }
-
-    setStepLoading("post", true);
-    try {
-      await msApi.submitPostReading({
-        sessionId,
-        reading: parseFloat(postReading),
-      });
-
-      setStep(4);
-      Alert.alert("Success", "Post meter reading saved!");
-    } catch (error) {
-      Alert.alert("Error", error.message || "Network error occurred");
-    } finally {
-      setStepLoading("post", false);
-    }
-  };
-
-  // ! CLEAR
-  // API call for final confirmation and SAP posting
-  const confirmAndPostToSAP = async () => {
-    // Simulate in dev/mock mode
-    if (sessionId?.startsWith("DEV-") || currentToken?.startsWith("MOCK-")) {
-      setStepLoading("confirm", true);
-      setTimeout(() => {
-        Alert.alert(
-          "Success",
-          `Data posted to SAP successfully! Document: DEV-${Date.now()}`
-        );
-        setStepLoading("confirm", false);
-        resetForm();
-      }, 300);
-      return;
-    }
-
-    setStepLoading("confirm", true);
-    try {
-      const data = await msApi.confirmAndPostToSAP({ sessionId });
-
-      Alert.alert(
-        "Success",
-        `Data posted to SAP successfully! Document: ${data.sapDocument}`
-      );
-      // Reset form
-      resetForm();
-    } catch (error) {
-      Alert.alert("Error", error.message || "Network error occurred");
-    } finally {
-      setStepLoading("confirm", false);
-    }
-  };
-
-  // ! CLEAR
-  const resetForm = () => {
-    setTruckNumber("");
-    setPreReading("");
-    setPostReading("");
-    setStep(1);
-    setSessionId(null);
-    // Keep token for next operation
-  };
-
-  //! CLEAR
-  // Render a step card with title, content, and disabled state
-  const renderStepCard = (stepNumber, title, children, isEnabled) => (
-    <View style={[styles.card, !isEnabled && styles.disabledCard]}>
-      <Text style={[styles.stepTitle, !isEnabled && styles.disabledText]}>
-        {stepNumber}. {title}
-      </Text>
-      {children}
-      {!isEnabled && (
-        <Text style={styles.disabledMessage}>
-          Complete previous step to unlock
-        </Text>
-      )}
-    </View>
-  );
-
-  // ! CLEAR
-  const canActOnArrival = useMemo(() => {
-    return Boolean(
-      effectiveAssignedTripId &&
-        effectiveAssignedDriverId &&
-        currentToken &&
-        !loading.token
-    );
-  }, [
-    effectiveAssignedTripId,
-    effectiveAssignedDriverId,
-    currentToken,
-    loading.token,
-  ]);
-
-  // ! CLEAR
   return (
     <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.header}>
-            {/* <Text style={styles.title}>MS Operations</Text>
-            <Text style={styles.subtitle}>
-              Manage truck arrivals and meter readings
-            </Text> */}
-          </View>
-
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {/* Token Status */}
           <View style={styles.tokenStatus}>
             <View style={styles.tokenHeader}>
               <View style={styles.tokenIcon}>
-                {loading.token ? (
+                {tokenLoading ? (
                   <ActivityIndicator size="small" color="#1e293b" />
                 ) : (
-                  <AppIcon
-                    icon={
-                      currentToken
-                        ? currentToken.startsWith("MOCK-")
-                          ? "robot"
-                          : "check"
-                        : "info"
-                    }
-                    size={16}
-                    color="#1e293b"
-                  />
+                    <AppIcon
+                      icon={
+                        tripToken
+                          ? tripToken.startsWith("MOCK-")
+                            ? "robot"
+                            : "check"
+                          : "info"
+                      }
+                      size={16}
+                      color="#1e293b"
+                    />
                 )}
               </View>
               <Text style={styles.tokenText}>
-                {loading.token
+                {tokenLoading
                   ? "Setting up token..."
-                  : currentToken
+                  : tripToken
                   ? `${
-                      currentToken.startsWith("MOCK-") ? "Mock" : "Real"
-                    } Token - Trip: ${tripId || effectiveAssignedTripId}`
+                      tripToken.startsWith("MOCK-") ? "Mock" : "Real"
+                    } Token - Trip: ${tripId}`
                   : "No active token"}
               </Text>
             </View>
-            {currentToken && (
+            {tripToken && (
               <View style={styles.tokenContent}>
                 <Text style={styles.tokenLabel}>Token ID:</Text>
-                <Text style={styles.tokenValue}>{currentToken}</Text>
-                {currentToken.startsWith("MOCK-") && (
+                <Text style={styles.tokenValue}>{tripToken}</Text>
+                {tripToken.startsWith("MOCK-") && (
                   <Text style={styles.tokenWarning}>
                     Development mode - real driver token not available
                   </Text>
                 )}
-                {!effectiveAssignedTripId && (
-                  <Text style={styles.tokenWarning}>
-                    Waiting for arrival assignment...
-                  </Text>
-                )}
               </View>
             )}
           </View>
 
-          {/* Expo Go quick-test helper: allow enabling a dev assignment when notifications are limited */}
-          {NotificationService.areNotificationsLimited() &&
-            !assignedTripId &&
-            !notifAssignment.tripId && (
-              <View style={[styles.tokenStatus, styles.mockTokenStatus]}>
-                <Text style={styles.tokenText}>Expo Go testing mode</Text>
-                <Text style={styles.mockWarning}>
-                  Push notifications are limited here. Tap below to enable a
-                  temporary test assignment so you can run the MS flow.
-                </Text>
-                <AppButton
-                  title={
-                    devAssignmentEnabled
-                      ? "Test assignment enabled"
-                      : "Enable test assignment"
-                  }
-                  onPress={() => setDevAssignmentEnabled(true)}
-                  disabled={devAssignmentEnabled}
-                  variant={devAssignmentEnabled ? "success" : "primary"}
-                  style={{ marginTop: 8 }}
-                />
-              </View>
-            )}
-
-          {/* Step 1: Confirm Truck Arrival */}
-          <View style={[styles.card, step !== 1 && styles.disabledCard]}>
+          {/* Step 1: Truck Arrival */}
+          <View style={styles.card}>
             <View style={styles.stepHeader}>
               <View style={styles.stepIcon}>
                 <AppIcon icon="vehicle" size={16} color="#1e293b" />
               </View>
-              <Text
-                style={[styles.stepTitle, step !== 1 && styles.disabledText]}
+              <Text style={styles.stepTitle}>Step 1: Truck Arrival</Text>
+            </View>
+            <Text style={styles.stepDescription}>
+              This step is enabled only after an MS-arrival notification for the
+              matching trip.
+            </Text>
+            {arrivalGate.allowed && notifAssignment.truckNumber && (
+              <View
+                style={{
+                  marginBottom: 16,
+                  padding: 12,
+                  backgroundColor: "#f0fdf4",
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#bbf7d0",
+                }}
               >
-                Step 1: Confirm Truck Arrival
-              </Text>
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Truck Number</Text>
-              <AppTextField
-                placeholder="Enter truck number"
-                value={truckNumber}
-                onChangeText={setTruckNumber}
-                editable={step === 1 && canActOnArrival}
-              />
-            </View>
-            <AppButton
-              title={step > 1 ? "Arrival Confirmed" : "Confirm Arrival"}
-              onPress={confirmTruckArrival}
-              disabled={step !== 1 || loading.arrival || !canActOnArrival}
-              loading={loading.arrival}
-              variant={
-                step > 1
-                  ? "success"
-                  : step === 1 && canActOnArrival
-                  ? "primary"
-                  : "neutral"
-              }
-            />
-            {!canActOnArrival && step === 1 && (
-              <Text style={styles.disabledMessage}>
-                Arrival action will be enabled after an MS arrival notification
-                assigns a trip to you.
-              </Text>
+                <Text style={{ color: "#166534", fontWeight: "bold" }}>
+                  Expected Truck: {notifAssignment.truckNumber}
+                </Text>
+              </View>
             )}
+            <AppButton
+              title={
+                arrivalGate.allowed
+                  ? "Confirm Truck Arrival"
+                  : "Waiting for Arrival Notification"
+              }
+              onPress={() => signalArrival.mutate()}
+              disabled={!canSimulate}
+              loading={signalArrival.isPending}
+              variant={canSimulate ? "primary" : "neutral"}
+            />
+            {!arrivalGate.allowed && (
+              <View>
+                <Text style={styles.statusMessage}>
+                  Awaiting backend push notification: type=ms_arrival with
+                  tripId.
+                </Text>
+              </View>
+            )}
+
+            {/* Dev Helper */}
+            <View style={styles.devSection}>
+              <Text style={styles.devTitle}>Development Mode</Text>
+              <Text style={styles.devText}>
+                Simulate arrival or reset state if stuck.
+              </Text>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <AppButton
+                  title="Simulate Arrival"
+                  onPress={simulateDevArrival}
+                  variant="outline"
+                  style={{ flex: 1 }}
+                />
+                <AppButton
+                  title="Reset State"
+                  onPress={() => {
+                    AsyncStorage.removeItem(STORAGE_KEY);
+                    setStep(0);
+                    setTripId(null);
+                    setTripToken(null);
+                    setArrivalGate({ allowed: false, forTrip: null });
+                    setNotifAssignment({
+                      tripId: null,
+                      driverId: null,
+                      truckNumber: null,
+                      tripToken: null,
+                    });
+                    Alert.alert("Reset", "State cleared.");
+                  }}
+                  variant="danger"
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </View>
           </View>
 
-          {/* Step 2: Pre Meter Reading */}
-          <View style={[styles.card, step < 2 && styles.disabledCard]}>
+          {/* Step 2: Pre-Fill Readings */}
+          <View style={styles.card}>
             <View style={styles.stepHeader}>
               <View style={styles.stepIcon}>
                 <AppIcon icon="analytics" size={16} color="#1e293b" />
               </View>
-              <Text style={[styles.stepTitle, step < 2 && styles.disabledText]}>
-                Step 2: Pre Meter Reading
-              </Text>
+              <Text style={styles.stepTitle}>Step 2: Pre-Fill Readings</Text>
+            </View>
+            <Text style={styles.stepDescription}>
+              Enter pre-fill meter readings before starting the filling process.
+            </Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Pressure</Text>
+              <AppTextField
+                placeholder="Enter pressure"
+                value={preReadings.pressure}
+                onChangeText={(val) =>
+                  setPreReadings((p) => ({ ...p, pressure: val }))
+                }
+                keyboardType="numeric"
+                editable={step === 2}
+              />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Pre Reading</Text>
+              <Text style={styles.inputLabel}>MFM Reading</Text>
               <AppTextField
-                placeholder="Enter pre meter reading"
-                value={preReading}
-                onChangeText={setPreReading}
+                placeholder="Enter MFM reading"
+                value={preReadings.mfm}
+                onChangeText={(val) =>
+                  setPreReadings((p) => ({ ...p, mfm: val }))
+                }
                 keyboardType="numeric"
                 editable={step === 2}
               />
             </View>
             <AppButton
-              title={step > 2 ? "Reading Saved" : "Submit Pre Reading"}
-              onPress={submitPreReading}
-              disabled={step !== 2 || loading.pre}
-              loading={loading.pre}
-              variant={
-                step > 2 ? "success" : step === 2 ? "primary" : "neutral"
-              }
+              title={step > 2 ? "Readings Saved" : "Start Filling"}
+              onPress={() => confirmPreReadings.mutate()}
+              disabled={!canConfirmPre}
+              loading={confirmPreReadings.isPending}
+              variant={step > 2 ? "success" : canConfirmPre ? "primary" : "neutral"}
             />
-            {step < 2 && (
-              <Text style={styles.disabledMessage}>
-                Complete truck arrival confirmation to unlock this step.
-              </Text>
-            )}
           </View>
 
-          {/* Step 3: Post Meter Reading */}
-          <View style={[styles.card, step < 3 && styles.disabledCard]}>
+          {/* Step 3: Post-Fill Readings */}
+          <View style={styles.card}>
             <View style={styles.stepHeader}>
               <View style={styles.stepIcon}>
                 <AppIcon icon="analytics" size={16} color="#1e293b" />
               </View>
-              <Text style={[styles.stepTitle, step < 3 && styles.disabledText]}>
-                Step 3: Post Meter Reading
-              </Text>
+              <Text style={styles.stepTitle}>Step 3: Post-Fill Readings</Text>
+            </View>
+            <Text style={styles.stepDescription}>
+              Enter post-fill meter readings after completing the filling process.
+            </Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Pressure</Text>
+              <AppTextField
+                placeholder="Enter pressure"
+                value={postReadings.pressure}
+                onChangeText={(val) =>
+                  setPostReadings((p) => ({ ...p, pressure: val }))
+                }
+                keyboardType="numeric"
+                editable={step === 3}
+              />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Post Reading</Text>
+              <Text style={styles.inputLabel}>MFM Reading</Text>
               <AppTextField
-                placeholder="Enter post meter reading"
-                value={postReading}
-                onChangeText={setPostReading}
+                placeholder="Enter MFM reading"
+                value={postReadings.mfm}
+                onChangeText={(val) =>
+                  setPostReadings((p) => ({ ...p, mfm: val }))
+                }
                 keyboardType="numeric"
                 editable={step === 3}
               />
             </View>
             <AppButton
-              title={step > 3 ? "Reading Saved" : "Submit Post Reading"}
-              onPress={submitPostReading}
-              disabled={step !== 3 || loading.post}
-              loading={loading.post}
-              variant={
-                step > 3 ? "success" : step === 3 ? "primary" : "neutral"
-              }
+              title={step > 3 ? "Readings Saved" : "End Filling"}
+              onPress={() => confirmPostReadings.mutate()}
+              disabled={!canConfirmPost}
+              loading={confirmPostReadings.isPending}
+              variant={step > 3 ? "success" : canConfirmPost ? "primary" : "neutral"}
             />
-            {step < 3 && (
-              <Text style={styles.disabledMessage}>
-                Complete pre meter reading to unlock this step.
-              </Text>
-            )}
           </View>
 
-          {/* Step 4: Confirm and Post to SAP */}
-          <View style={[styles.card, step < 4 && styles.disabledCard]}>
+          {/* Step 4: Final Confirm */}
+          <View style={styles.card}>
             <View style={styles.stepHeader}>
               <View style={styles.stepIcon}>
                 <AppIcon icon="check" size={16} color="#1e293b" />
               </View>
-              <Text style={[styles.stepTitle, step < 4 && styles.disabledText]}>
-                Step 4: Confirm & Post to SAP
-              </Text>
+              <Text style={styles.stepTitle}>Step 4: Final Confirmation</Text>
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Delivered Quantity</Text>
+              <AppTextField
+                placeholder={
+                  step === 4
+                    ? "Enter delivered quantity"
+                    : "Complete filling process first"
+                }
+                value={qty}
+                onChangeText={setQty}
+                keyboardType="numeric"
+                editable={step === 4}
+              />
             </View>
             <AppButton
-              title="Confirm & Post to SAP"
-              onPress={confirmAndPostToSAP}
-              disabled={step !== 4 || loading.confirm}
-              loading={loading.confirm}
-              variant={step === 4 ? "success" : "neutral"}
+              title="Confirm & Close"
+              onPress={() => acknowledgeOperator.mutate()}
+              disabled={step !== 4 || acknowledgeOperator.isPending || !qty}
+              loading={acknowledgeOperator.isPending}
+              variant={step === 4 ? "primary" : "neutral"}
             />
-            {step < 4 && (
-              <Text style={styles.disabledMessage}>
-                Complete post meter reading to unlock this step.
-              </Text>
-            )}
           </View>
-
-          {sessionId && (
-            <View style={styles.sessionInfo}>
-              <View style={styles.sessionHeader}>
-                <View style={styles.sessionIcon}>
-                  <AppIcon icon="info" size={12} color="#1e293b" />
-                </View>
-                <Text style={styles.sessionText}>Active Session</Text>
-              </View>
-              <Text style={styles.sessionSubtext}>Session ID: {sessionId}</Text>
-              <Text style={styles.sessionSubtext}>
-                Trip ID: {tripId || effectiveAssignedTripId}
-              </Text>
-            </View>
-          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

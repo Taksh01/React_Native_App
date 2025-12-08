@@ -15,12 +15,16 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { GTS } from "../../api/client";
 import AppIcon from "../../components/AppIcon";
 import { useThemedStyles } from "../../theme";
+import {
+  getStockStatusColor,
+  getStockStatusLabel,
+} from "../../config/stockStatus";
 
 export default function StockTransfersView({
   dbsId,
+  fetchApi, // New prop for dependency injection
   headerComponent = null,
   requireSelectionTitle = "Select a DBS to view stock transfers",
   requireSelectionSubtitle = "Choose a depot to load transfer activity",
@@ -37,9 +41,17 @@ export default function StockTransfersView({
   ).map((value) => value.toUpperCase());
 
   // Date filtering state
-  const [startDate, setStartDate] = useState(new Date());
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d;
+  });
   const [endDate, setEndDate] = useState(new Date());
-  const [appliedStartDate, setAppliedStartDate] = useState(new Date());
+  const [appliedStartDate, setAppliedStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d;
+  });
   const [appliedEndDate, setAppliedEndDate] = useState(new Date());
   const [pickerMode, setPickerMode] = useState(null); // "start" | "end" | null
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -104,6 +116,7 @@ export default function StockTransfersView({
   };
 
   const applyDateFilter = () => {
+
     setAppliedStartDate(startDate);
     setAppliedEndDate(endDate);
   };
@@ -475,12 +488,16 @@ export default function StockTransfersView({
       appliedStartDate.toDateString(),
       appliedEndDate.toDateString(),
     ],
-    queryFn: () =>
-      GTS.getStockTransfers(dbsId, {
+    queryFn: () => {
+      if (!fetchApi) {
+        throw new Error("fetchApi prop is required");
+      }
+      return fetchApi(dbsId, {
         startDate: appliedStartDate.toISOString(),
         endDate: appliedEndDate.toISOString(),
-      }),
-    enabled: Boolean(dbsId),
+      });
+    },
+    enabled: Boolean(dbsId && fetchApi),
     refetchInterval: 60000,
     refetchIntervalInBackground: false,
     notifyOnChangeProps: ["data", "error"],
@@ -492,15 +509,7 @@ export default function StockTransfersView({
     }
   }, [dbsId, refetch]);
 
-  const getDisplayStatus = (status) => {
-    return (status ?? "").toString().toUpperCase() === "COMPLETED"
-      ? "COMPLETED"
-      : "IN_PROGRESS";
-  };
 
-  const getStatusColor = (status) => {
-    return getDisplayStatus(status) === "COMPLETED" ? "#10b981" : "#3b82f6";
-  };
 
   const formatDate = (timestamp) => {
     if (!timestamp) return "--";
@@ -554,21 +563,21 @@ export default function StockTransfersView({
             Priority: {(item.priority || "standard").toUpperCase()}
           </Text> */}
           </View>
-          {/* <View
+          <View
             style={[
               styles.statusBadge,
-              { backgroundColor: `${getStatusColor(item.status)}1A` },
+              { backgroundColor: getStockStatusColor(item.status) },
             ]}
           >
             <Text
               style={[
                 styles.statusText,
-                { color: getStatusColor(item.status) },
+                { color: '#ffffff' },
               ]}
             >
-              {getDisplayStatus(item.status)}
+              {getStockStatusLabel(item.status)}
             </Text>
-          </View> */}
+          </View>
         </View>
 
         <View style={styles.productInfo}>
@@ -641,34 +650,7 @@ export default function StockTransfersView({
     );
   }
 
-  const allTransfers = transfersData?.transfers || [];
-  const transfers = allTransfers.filter((transfer) => {
-    // Filter by type
-    const matchesType = typeFilters.includes(
-      (transfer.type ?? "").toString().toUpperCase()
-    );
-
-    // Filter by date range
-    const transferDate = new Date(
-      transfer.initiatedAt || transfer.createdAt || transfer.completedAt
-    );
-    const startOfDay = new Date(
-      appliedStartDate.getFullYear(),
-      appliedStartDate.getMonth(),
-      appliedStartDate.getDate()
-    );
-    const endOfDay = new Date(
-      appliedEndDate.getFullYear(),
-      appliedEndDate.getMonth(),
-      appliedEndDate.getDate(),
-      23,
-      59,
-      59
-    );
-    const matchesDate = transferDate >= startOfDay && transferDate <= endOfDay;
-
-    return matchesType && matchesDate;
-  });
+  const transfers = transfersData?.transfers || [];
 
   const renderDateFilter = () => (
     <View style={styles.dateFilterContainer}>
@@ -734,7 +716,7 @@ export default function StockTransfersView({
   const derivedSummary = transfers.reduce(
     (acc, transfer) => {
       acc.total += 1;
-      if (getDisplayStatus(transfer.status) === "COMPLETED") {
+      if (transfer.status === "COMPLETED") {
         acc.completed += 1;
       } else {
         acc.inProgress += 1;

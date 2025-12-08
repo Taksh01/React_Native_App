@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -8,6 +10,10 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../store/auth";
@@ -18,6 +24,7 @@ import AppButton from "../../components/AppButton";
 import logBase64 from "../../utils/logBase64";
 import { useThemedStyles } from "../../theme";
 import * as ImagePicker from "expo-image-picker";
+import { TRIP_STATUS } from "../../config/tripStatus";
 
 // Trip steps
 const TRIP_STEPS = {
@@ -42,14 +49,7 @@ const STEP_TITLES = {
   [TRIP_STEPS.TRIP_COMPLETED]: "Trip Completed",
 };
 
-const FALLBACK_TRIP_DATA = {
-  tripId: "TRIP-001",
-  msLocation: { name: "MS Station Alpha", address: "Industrial Area A" },
-  dbsLocation: { name: "DBS Station Beta", address: "Delivery Zone B" },
-  estimatedDistance: "15.2 km",
-  estimatedTime: "25 mins",
-  status: "ASSIGNED",
-};
+// Fallback data removed
 
 const DEFAULT_READINGS_STATE = {
   msPreConfirmed: false,
@@ -67,35 +67,39 @@ const DEFAULT_READINGS_STATE = {
   dbsPostPhotoBase64: null,
 };
 
-const createFallbackToken = (tripId = FALLBACK_TRIP_DATA.tripId) =>
-  `MOCK-TKN-${tripId}-${Date.now()}`;
+// Mock token generation removed
 
 const deriveStepFromStatus = (status) => {
   const normalized = (status || "").toUpperCase();
   switch (normalized) {
+    case TRIP_STATUS.PENDING:
     case "WAITING_FOR_TRIP":
     case "CREATED":
     case "ASSIGNED":
     case "TRIP_ACCEPTED":
       return TRIP_STEPS.NAVIGATE_TO_MS;
-    case "AT_MS":
+    case TRIP_STATUS.AT_MS:
     case "MS_ARRIVED":
     case "MS_ARRIVAL_CONFIRMED":
       return TRIP_STEPS.AT_MS_FILLING;
+    case TRIP_STATUS.IN_TRANSIT:
     case "MS_COMPLETED":
     case "NAVIGATE_TO_DBS":
     case "EN_ROUTE_TO_DBS":
       return TRIP_STEPS.NAVIGATE_TO_DBS;
-    case "AT_DBS":
+    case TRIP_STATUS.AT_DBS:
     case "DBS_ARRIVED":
     case "DBS_ARRIVAL_CONFIRMED":
       return TRIP_STEPS.AT_DBS_DELIVERY;
+    case TRIP_STATUS.DECANTING_CONFIRMED:
     case "DBS_COMPLETED":
     case "RETURN_TO_MS":
       return TRIP_STEPS.NAVIGATE_BACK_TO_MS;
+    case TRIP_STATUS.COMPLETED:
     case "TRIP_COMPLETED":
-    case "COMPLETED":
       return TRIP_STEPS.TRIP_COMPLETED;
+    case TRIP_STATUS.CANCELLED:
+      return TRIP_STEPS.WAITING_FOR_TRIP; // Reset if cancelled
     default:
       return TRIP_STEPS.NAVIGATE_TO_MS;
   }
@@ -336,6 +340,27 @@ export default function DriverDashboard({ navigation, route }) {
     readingType: null,
   });
 
+  // Rejection modal state
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+
+  // Load persisted token on mount
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem("current_trip_token");
+        if (storedToken && mounted) {
+
+          setToken(storedToken);
+        }
+      } catch (e) {
+        console.warn("Failed to load persisted token", e);
+      }
+    })();
+    return () => (mounted = false);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -423,39 +448,168 @@ export default function DriverDashboard({ navigation, route }) {
     }
   };
 
+
+
+
   // Handle navigation from notification payload (non-intrusive)
-  useEffect(() => {
-    const params = route?.params;
-    if (params?.fromNotification && params?.type === "trip_assignment") {
-      // Optionally, highlight or prefill based on notifParams (tripId, vehicleId, etc.)
-      // Keeping UI logic unchanged; this is a safe placeholder hook.
-      console.log("Notification opened:", params);
-    }
-  }, [route]);
+  // We use useFocusEffect to ensure this checks every time the screen becomes active
+  useFocusEffect(
+    useCallback(() => {
 
-  // Simulate receiving push notification and trip acceptance
-  // ! Later on this would be replaced by actual push notification handling logic: So Dont Worry
-  useEffect(() => {
-    // Simulate push notification after 2 seconds
-    const timer = setTimeout(() => {
-      if (currentStep === TRIP_STEPS.WAITING_FOR_TRIP) {
-        Alert.alert(
-          "New Trip Assignment",
-          `Trip ${FALLBACK_TRIP_DATA.tripId}\nFrom: ${FALLBACK_TRIP_DATA.msLocation.name}\nTo: ${FALLBACK_TRIP_DATA.dbsLocation.name}`,
-          [
-            { text: "Reject", style: "cancel" },
-            { text: "Accept", onPress: acceptTrip },
-          ]
-        );
+      
+      // 1. Check route params
+      const params = route?.params;
+      if (params?.fromNotification && params?.tripId) {
+
+        
+        // If explicitly opened from notification, we should show it even if step is loading
+        // But we should still check if we are already in a trip (step > 0) to avoid conflict
+        // If currentStep is undefined (loading), we allow it.
+        if (currentStep === undefined || currentStep === TRIP_STEPS.WAITING_FOR_TRIP) {
+          const tripInfo = {
+            tripId: params.tripId,
+            msId: params.msId,
+            dbsId: params.dbsId,
+            vehicleId: params.vehicleId,
+            ...params,
+          };
+          // Clear params to prevent loop
+          navigation.setParams({ fromNotification: undefined, tripId: undefined });
+          showTripAssignmentAlert(tripInfo);
+          return;
+        } else {
+           console.warn("[DriverDashboard] Notification ignored because driver is busy. Step:", currentStep);
+        }
       }
-    }, 2000);
 
-    return () => clearTimeout(timer);
-  }, [currentStep, acceptTrip]);
+      // 2. Check NotificationService last event
+      const NotificationService = require("../../services/NotificationService").default;
+      const lastEvent = NotificationService.getLastEvent("trip_assignment");
+      
+      if (lastEvent?.tripId) {
 
-  const acceptTrip = useCallback(async () => {
-    const fallbackTrip = { ...FALLBACK_TRIP_DATA };
+        if (currentStep === undefined || currentStep === TRIP_STEPS.WAITING_FOR_TRIP) {
+          showTripAssignmentAlert(lastEvent);
+          NotificationService.clearLastEvent("trip_assignment");
+        }
+      }
+    }, [route?.params, currentStep, showTripAssignmentAlert, navigation])
+  );
+
+  // State to hold pending trip data from notification
+  const [pendingTripData, setPendingTripData] = useState(null);
+
+  // Track locally rejected trips to prevent zombie notifications
+  // Map of tripId -> timestamp
+  const rejectedTripIds = useRef(new Map());
+
+  // Show trip assignment alert
+  const showTripAssignmentAlert = useCallback((tripInfo) => {
+
+    // Check if we are already processing this trip (Alert shown or Modal open)
+    if (pendingTripData && pendingTripData.tripId === tripInfo.tripId) {
+
+      return;
+    }
+
+    setPendingTripData(tripInfo);
+    
+    const fromText = tripInfo.msId ? `From: ${tripInfo.msId}\n` : "";
+    const quantityText = tripInfo.quantity ? `\nQty: ${tripInfo.quantity}` : "";
+    const priorityText = tripInfo.priority ? `\nPriority: ${tripInfo.priority}` : "";
+    
+    Alert.alert(
+      "New Trip Assignment",
+      `Stock Request Id: ${tripInfo.tripId}\n${fromText}To: ${tripInfo.dbsId || "N/A"}${quantityText}${priorityText}`,
+      [
+        { 
+          text: "Reject", 
+          style: "cancel",
+          onPress: () => {
+            // Close alert and open modal
+            setShowRejectModal(true);
+          },
+        },
+        { 
+          text: "Accept", 
+          onPress: () => acceptTrip(tripInfo)
+        },
+      ],
+      { cancelable: false }
+    );
+  }, [acceptTrip, pendingTripData]); // Added pendingTripData dependency
+
+  const handleRejectSubmit = async () => {
+
+    if (!pendingTripData) {
+      console.warn("[DriverDashboard] No pending trip data to reject");
+      setShowRejectModal(false); // Ensure modal closes even if no data
+      return;
+    }
+    
+    const tripIdToReject = pendingTripData.tripId;
     setLoading((prev) => ({ ...prev, trip: true }));
+    
+    try {
+
+      
+      // Add to rejected set immediately to prevent re-alerts
+      // rejectedTripIds.current.set(tripIdToReject, Date.now());
+      
+      await driverApi.rejectTrip({
+        tripId: tripIdToReject,
+        reason: rejectReason || "Driver declined",
+      });
+
+      
+      setPendingTripData(null);
+      setShowRejectModal(false);
+      setRejectReason("");
+    } catch (error) {
+      console.error("Failed to reject trip:", error);
+      // If failed, remove from rejected set so they can try again
+      // rejectedTripIds.current.delete(tripIdToReject);
+      Alert.alert("Error", "Failed to reject trip. Please try again.");
+    } finally {
+      setLoading((prev) => ({ ...prev, trip: false }));
+    }
+  };
+
+  // Listen for trip_assignment notifications from NotificationService (Foreground)
+  useEffect(() => {
+    const NotificationService = require("../../services/NotificationService").default;
+    
+    const handleTripAssignment = (data) => {
+
+      if (currentStep === TRIP_STEPS.WAITING_FOR_TRIP && data?.tripId) {
+        
+        // Clear the event from service so useFocusEffect doesn't pick it up again
+        NotificationService.clearLastEvent("trip_assignment");
+        
+        showTripAssignmentAlert(data);
+      } else {
+
+      }
+    };
+
+    const unsubscribe = NotificationService.addListener(
+      "trip_assignment",
+      handleTripAssignment
+    );
+
+    return () => unsubscribe();
+  }, [currentStep, showTripAssignmentAlert]);
+
+
+  const acceptTrip = useCallback(async (tripInfo = null) => {
+    // Use tripInfo from notification or fallback to route params
+    const tripData = tripInfo || pendingTripData || route?.params || {};
+    const tripId = tripData.tripId;
+    
+
+    
+    setLoading((prev) => ({ ...prev, trip: true }));
+    setPendingTripData(null); // Clear pending data
 
     try {
       // 1) Attempt to accept trip via backend
@@ -474,21 +628,34 @@ export default function DriverDashboard({ navigation, route }) {
       //   }
       // }
       const response = await driverApi.acceptTrip({
-        tripId: route?.params?.tripId || fallbackTrip.tripId,
-        driverId: user?.id || "7",
+        tripId: tripId,
       });
 
       const serverTrip = response?.trip || response || null;
-      const initialTrip = serverTrip
-        ? { ...fallbackTrip, ...serverTrip }
-        : { ...fallbackTrip };
+      
+      // Build trip data from notification + server response
+      const initialTrip = {
+        tripId: tripId,
+        msLocation: { name: tripData.msId || "MS Station", address: "Loading..." },
+        dbsLocation: { name: tripData.dbsId || "DBS Station", address: "Loading..." },
+        estimatedDistance: "Calculating...",
+        estimatedTime: "Calculating...",
+        status: "ASSIGNED",
+        ...tripData,
+        ...serverTrip,
+      };
 
       const resolvedToken =
-        response?.token ||
-        response?.driverToken ||
-        createFallbackToken(initialTrip.tripId || fallbackTrip.tripId);
+        response?.driverToken;
 
       setToken(resolvedToken);
+      
+      // Persist token
+      if (resolvedToken) {
+        AsyncStorage.setItem("current_trip_token", resolvedToken).catch(e => 
+          console.warn("Failed to persist token", e)
+        );
+      }
 
       let resolvedTrip = { ...initialTrip };
       let nextStep = deriveStepFromStatus(resolvedTrip.status);
@@ -546,19 +713,19 @@ export default function DriverDashboard({ navigation, route }) {
       setCurrentStep(nextStep);
       setReadingsState(() => ({ ...DEFAULT_READINGS_STATE }));
     } catch (error) {
-      console.warn(
-        "Failed to accept trip via backend, switching to fallback.",
+      console.error(
+        "[DriverDashboard] Failed to accept trip:",
         error?.message || error
       );
-      const fallbackToken = createFallbackToken(fallbackTrip.tripId);
-      setToken(fallbackToken);
-      setTripData(fallbackTrip);
-      setCurrentStep(TRIP_STEPS.NAVIGATE_TO_MS);
-      setReadingsState(() => ({ ...DEFAULT_READINGS_STATE }));
+      Alert.alert(
+        "Failed to Accept Trip",
+        "Could not connect to server. Please try again.",
+        [{ text: "OK" }]
+      );
     } finally {
       setLoading((prev) => ({ ...prev, trip: false }));
     }
-  }, [user?.id]);
+  }, [user?.id, pendingTripData, route?.params]);
 
   const handleArrivedAtMS = useCallback(async () => {
     setLoading((prev) => ({ ...prev, navigation: true }));
@@ -626,6 +793,11 @@ export default function DriverDashboard({ navigation, route }) {
     setLastKnownLocation(null);
     // Reset readings state
     setReadingsState(() => ({ ...DEFAULT_READINGS_STATE }));
+    
+    // Clear persisted token
+    AsyncStorage.removeItem("current_trip_token").catch(e =>
+      console.warn("Failed to clear persisted token", e)
+    );
   };
 
   // Meter reading handlers
@@ -812,10 +984,8 @@ export default function DriverDashboard({ navigation, route }) {
       name: destination,
       address:
         destination === tripData?.msLocation?.name
-          ? tripData?.msLocation?.address ||
-            FALLBACK_TRIP_DATA.msLocation.address
-          : tripData?.dbsLocation?.address ||
-            FALLBACK_TRIP_DATA.dbsLocation.address,
+          ? tripData?.msLocation?.address
+          : tripData?.dbsLocation?.address,
     };
 
     return (
@@ -1115,7 +1285,7 @@ export default function DriverDashboard({ navigation, route }) {
 
       case TRIP_STEPS.NAVIGATE_TO_MS:
         return renderNavigationView(
-          tripData?.msLocation?.name || FALLBACK_TRIP_DATA.msLocation.name,
+          tripData?.msLocation?.name,
           handleArrivedAtMS
         );
 
@@ -1124,7 +1294,7 @@ export default function DriverDashboard({ navigation, route }) {
 
       case TRIP_STEPS.NAVIGATE_TO_DBS:
         return renderNavigationView(
-          tripData?.dbsLocation?.name || FALLBACK_TRIP_DATA.dbsLocation.name,
+          tripData?.dbsLocation?.name,
           handleArrivedAtDBS
         );
 
@@ -1133,7 +1303,7 @@ export default function DriverDashboard({ navigation, route }) {
 
       case TRIP_STEPS.NAVIGATE_BACK_TO_MS:
         return renderNavigationView(
-          tripData?.msLocation?.name || FALLBACK_TRIP_DATA.msLocation.name,
+          tripData?.msLocation?.name,
           handleReturnedToMS
         );
 
@@ -1173,6 +1343,114 @@ export default function DriverDashboard({ navigation, route }) {
         variant="danger"
         style={styles.emergencyButton}
       />
+
+      {/* Rejection Reason Modal */}
+      <Modal
+        visible={showRejectModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowRejectModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            backgroundColor: "rgba(0,0,0,0.5)",
+            padding: 20,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: themeRef.current?.colors?.surfaceElevated || "#fff",
+              borderRadius: 12,
+              padding: 20,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 3.84,
+              elevation: 5,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "bold",
+                marginBottom: 12,
+                color: themeRef.current?.colors?.textPrimary || "#000",
+              }}
+            >
+              Reject Trip
+            </Text>
+            <Text
+              style={{
+                fontSize: 14,
+                color: themeRef.current?.colors?.textSecondary || "#666",
+                marginBottom: 16,
+              }}
+            >
+              Please provide a reason for rejecting this trip assignment.
+            </Text>
+            
+            <TextInput
+              style={{
+                borderWidth: 1,
+                borderColor: themeRef.current?.colors?.borderSubtle || "#ccc",
+                borderRadius: 8,
+                padding: 12,
+                minHeight: 100,
+                textAlignVertical: "top",
+                marginBottom: 20,
+                fontSize: 16,
+                color: themeRef.current?.colors?.textPrimary || "#000",
+              }}
+              placeholder="Enter reason (e.g., Vehicle breakdown, Unwell)..."
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              multiline
+            />
+
+            <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 12 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowRejectModal(false);
+                  setRejectReason("");
+                  // Keep pendingTripData so they can decide again
+                }}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: themeRef.current?.colors?.borderSubtle || "#ccc",
+                }}
+              >
+                <Text style={{ fontWeight: "600", color: themeRef.current?.colors?.textSecondary || "#666" }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                onPress={handleRejectSubmit}
+                disabled={!rejectReason.trim() || loading.trip}
+                style={{
+                  backgroundColor: themeRef.current?.colors?.danger || "#dc2626",
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  opacity: (!rejectReason.trim() || loading.trip) ? 0.5 : 1,
+                }}
+              >
+                {loading.trip ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={{ fontWeight: "600", color: "#fff" }}>Reject Trip</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
