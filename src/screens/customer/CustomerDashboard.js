@@ -9,15 +9,22 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { GTS } from "../../api/client";
+import * as sglCustomerApi from "../../lib/sglCustomerApi";
 import { useAuth } from "../../store/auth";
 import AppIcon from "../../components/AppIcon";
 import AppButton from "../../components/AppButton";
 import { useThemedStyles } from "../../theme";
+import {
+  TRIP_STATUS_CONFIG,
+  getTripStatusColor,
+  getTripStatusLabel,
+} from "../../config/tripStatus";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 export default function CustomerDashboard() {
+  useScreenPermissionSync("CustomerDashboard");
   const { user } = useAuth();
-  const dbsId = user?.dbsId ?? "DBS-09";
+  const dbsId = user?.dbsId;
 
   const styles = useThemedStyles((theme) =>
     StyleSheet.create({
@@ -155,7 +162,7 @@ export default function CustomerDashboard() {
     error,
   } = useQuery({
     queryKey: ["customerDashboard", dbsId],
-    queryFn: () => GTS.getCustomerDashboard(dbsId),
+    queryFn: () => sglCustomerApi.getCustomerDashboard(),
     refetchInterval: 30000,
   });
 
@@ -163,45 +170,14 @@ export default function CustomerDashboard() {
     refetch();
   }, [refetch]);
 
-  const STATUS_COLORS = {
-    FILLING: "#0ea5e9",
-    DISPATCHED: "#2563eb",
-    COMPLETED: "#10b981",
-  };
-
-  const STATUS_GROUPS = {
-    COMPLETED: ["COMPLETED", "DELIVERED", "CONFIRMED"],
-    DISPATCHED: ["DISPATCHED", "EN_ROUTE"],
-    FILLING: ["PENDING", "SCHEDULED", "ON_HOLD", "IN_PROGRESS"],
-  };
-
-  const categorizeStatus = (status) => {
-    const normalized = String(status || "").toUpperCase();
-    if (STATUS_GROUPS.COMPLETED.some((value) => normalized.includes(value))) {
-      return "COMPLETED";
-    }
-    if (STATUS_GROUPS.DISPATCHED.some((value) => normalized.includes(value))) {
-      return "DISPATCHED";
-    }
-    return "FILLING";
-  };
-
-  const formatStatusLabel = (status) => {
-    const category = categorizeStatus(status);
-    if (category === "DISPATCHED") return "Dispatched";
-    if (category === "COMPLETED") return "Completed";
-    return "Filling";
-  };
-
-  const getStatusColor = (status) =>
-    STATUS_COLORS[categorizeStatus(status)] || "#6b7280";
-
   const formatTime = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString("en-IN", {
       hour: "2-digit",
       minute: "2-digit",
     });
   };
+
+
 
   const renderStatsCard = ({ item }) => {
     const safeIcon = resolveStatIcon(item);
@@ -223,10 +199,12 @@ export default function CustomerDashboard() {
         <View
           style={[
             styles.statusBadge,
-            { backgroundColor: getStatusColor(item.status) },
+            { backgroundColor: getTripStatusColor(item.status) },
           ]}
         >
-          <Text style={styles.statusText}>{formatStatusLabel(item.status)}</Text>
+          <Text style={styles.statusText}>
+            {getTripStatusLabel(item.status).toUpperCase()}
+          </Text>
         </View>
       </View>
       <Text style={styles.tripRoute}>{item.route}</Text>

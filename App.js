@@ -11,6 +11,8 @@ import { StatusBar } from "expo-status-bar";
 import NotificationService from "./src/services/NotificationService";
 import { ThemeProvider, useTheme } from "./src/theme";
 import ErrorBoundary from "./src/components/ErrorBoundary";
+import PermissionRequiredScreen from "./src/screens/PermissionRequiredScreen";
+import { AppState, Linking } from "react-native";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,21 +45,66 @@ function AppContent() {
   );
 
   const navigationRef = useRef();
+  const [hasPermission, setHasPermission] = React.useState(null); // null = checking, true/false
+
+  const checkPermissions = async () => {
+    // Check if we have permission
+    const granted = await NotificationService.checkPermission();
+    setHasPermission(granted);
+    return granted;
+  };
 
   useEffect(() => {
-    // Initialize notification service when app starts
-    const initializeNotifications = async () => {
+    // 1. Initial check on mount
+    const init = async () => {
+      // First check existing status
+      let granted = await checkPermissions();
+      
+      // If not granted, try to request ONCE on startup
+      if (!granted) {
+        granted = await NotificationService.requestPermission();
+        setHasPermission(granted);
+      }
+      
+      // Initialize service logic regardless (it handles its own permission check internally too, but we need state here)
       try {
-        // Initialize notification service without registering token
-        // Token will be registered after user login with real user ID
-        await NotificationService.initialize();
-      } catch (error) {
-        console.error("Failed to initialize notifications:", error);
+         await NotificationService.initialize();
+      } catch (e) {
+         console.error(e);
       }
     };
+    
+    init();
 
-    initializeNotifications();
+    // 2. Add AppState listener to re-check when app comes to foreground
+    // This covers the case where user goes to settings, enables/disables, and comes back
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        checkPermissions();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
+
+  if (hasPermission === false) {
+    return (
+      <PermissionRequiredScreen 
+        onPermissionGranted={() => setHasPermission(true)} 
+      />
+    );
+  }
+
+  // Optional: Show nothing or splash while checking (hasPermission === null)
+  // But usually typically we can just render the app and let it switch if needed, 
+  // or return null to avoid flicker. 
+  // If we return null, the splash screen stays until we are done (if expo).
+  // Let's render null for a split second to ensure we don't show app then hide it.
+  if (hasPermission === null) {
+      return null; 
+  }
 
   return (
     <GestureCompatWrapper style={{ flex: 1, backgroundColor: theme.colors.background }}>

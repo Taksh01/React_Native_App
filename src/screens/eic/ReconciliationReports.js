@@ -16,6 +16,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { GTS } from "../../api/client";
 import { useAuth } from "../../store/auth";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 const STATUS_FILTERS = [
   { label: "All Status", value: "ALL" },
@@ -52,6 +53,7 @@ function normalizeReports(payload) {
 }
 
 export default function ReconciliationReports() {
+  useScreenPermissionSync("ReconciliationReports");
   const [filters, setFilters] = useState(defaultFilters);
   const [selectedReport, setSelectedReport] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);

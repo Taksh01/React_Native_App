@@ -55,21 +55,25 @@ const handleApiError = (error, fallbackMessage) => {
 // DBS - Token-based operations
 export async function apiSignalArrival(tripToken) {
   try {
-    const response = await fetch(
-      `${CONFIG.API_BASE_URL}/api/dbs/stock-requests/arrival/confirm`,
-      {
+    const url = `${CONFIG.API_BASE_URL}/api/dbs/stock-requests/arrival/confirm`;
+    console.log("[dbsApi] apiSignalArrival URL:", url, "Token:", tripToken);
+
+    const response = await fetch(url, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ tripToken }),
-      }
-    );
+    });
+    
+    const text = await response.text();
+    console.log("[dbsApi] response:", response.status, text);
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    console.log("apiSignalArrival response data:", data);
-    return data;
+    try {
+        return JSON.parse(text);
+    } catch(e) { return text; }
   } catch (error) {
     console.error("apiSignalArrival error:", error);
     handleApiError(error, "Failed to signal arrival");
@@ -125,25 +129,24 @@ export async function apiStartDecant(tripToken, readings) {
 
 export async function apiEndDecant(tripToken, readings) {
   try {
-    console.log("apiEndDecant called with:", { tripToken, readings });
-    const response = await fetch(
-      `${CONFIG.API_BASE_URL}/api/dbs/stock-requests/decant/end`,
-      {
+    const url = `${CONFIG.API_BASE_URL}/api/dbs/stock-requests/decant/end`;
+    const payload = { tripToken, ...readings };
+    console.log("[dbsApi] apiEndDecant URL:", url, JSON.stringify(payload));
+    
+    const response = await fetch(url, {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ tripToken, ...readings }),
-      }
-    );
+        body: JSON.stringify(payload),
+    });
 
-    console.log("apiEndDecant response status:", response.status);
+    const text = await response.text();
+    console.log("[dbsApi] response:", response.status, text);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    console.log("apiEndDecant response data:", data);
-    return data;
+    return JSON.parse(text);
   } catch (error) {
     console.error("apiEndDecant error:", error);
     handleApiError(error, "Failed to end decant");
@@ -292,5 +295,29 @@ export async function apiGetManualRequests() {
     return data;
   } catch (error) {
     handleApiError(error, "Failed to fetch manual requests");
+  }
+}
+
+// DBS - Get Pending Arrivals
+export async function apiGetPendingArrivals() {
+  try {
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/api/dbs/pending-arrivals`,
+      {
+        method: "GET",
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      // gracefully fail if endpoint doesn't exist yet
+      if (response.status === 404) return { arrivals: [] };
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.warn("Pending arrivals check failed:", error);
+    return { arrivals: [] };
   }
 }

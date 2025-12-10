@@ -81,9 +81,12 @@ const buildSections = (trips = []) => {
 const getStatusColor = (status) => STATUS_COLORS[status] || STATUS_COLORS.DEFAULT;
 const getStatusLabel = (status) => STATUS_LABELS[status] || status;
 
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
+
 export default function DBSDashboard() {
+  useScreenPermissionSync("DBSDashboard");
   const { user } = useAuth();
-  const dbsId = user?.dbsId || "DBS-09";
+  const dbsId = user?.dbsId;
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -290,7 +293,7 @@ export default function DBSDashboard() {
         </View>
       </View>
       <Text style={styles.tripRoute}>
-        {item.route || `${item.msName || "MS"} → ${item.dbsName || "DBS"}`}
+        {item.route || `${item.msName} → ${item.dbsName}`}
       </Text>
       {/* <View style={styles.metaRow}>
         <View style={styles.metaItem}>

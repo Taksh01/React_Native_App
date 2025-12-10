@@ -8,11 +8,13 @@ import {
   TouchableOpacity,
   RefreshControl,
   TextInput,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../store/auth";
 import { driverApi } from "../../lib/driverApi";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 import AppIcon from "../../components/AppIcon";
 import AppButton from "../../components/AppButton";
 import {
@@ -67,9 +69,9 @@ function groupTripsByDate(trips) {
 }
 
 export default function TripHistory({ navigation }) {
+  useScreenPermissionSync("TripHistory");
   const { user } = useAuth();
-  const MS_DISPLAY_NAME = "Vastral MS";
-  const DBS_DISPLAY_NAME = "Mehsana DBS";
+
   const [loading, setLoading] = useState(false);
   const [trips, setTrips] = useState([]);
   const [error, setError] = useState(null);
@@ -141,18 +143,13 @@ export default function TripHistory({ navigation }) {
     setLoading(true);
     setError(null);
     try {
-      const driverId = user?.id || "unknown";
-      const res = await driverApi.getTripHistory({
-        driverId,
-        page: 1,
-        limit: 200,
-      });
+      const res = await driverApi.getTripHistory();
       // Expect res.trips or res.data or res
       const list = res?.trips || res?.data || res || [];
       setTrips(Array.isArray(list) ? list : []);
     } catch (err) {
       console.warn("Trip history fetch failed", err?.message || err);
-      setError(err?.message || "Failed to load trips");
+      setError(err?.message);
       setTrips([]);
     } finally {
       setLoading(false);
@@ -195,6 +192,8 @@ export default function TripHistory({ navigation }) {
 
 
 
+  const [selectedTrip, setSelectedTrip] = useState(null);
+
   const renderItem = ({ item }) => (
     <TouchableOpacity
       activeOpacity={0.8}
@@ -202,7 +201,7 @@ export default function TripHistory({ navigation }) {
         styles.tripCard,
         { backgroundColor: themeRef.current?.colors?.surfaceElevated },
       ]}
-      onPress={() => navigation?.navigate("Dashboard", { trip: item })}
+      onPress={() => setSelectedTrip(item)}
     >
       <View
         style={{
@@ -214,7 +213,7 @@ export default function TripHistory({ navigation }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.tripTitle}>Trip {item.tripId}</Text>
           <Text style={styles.tripMeta} numberOfLines={1} ellipsizeMode="tail">
-            {MS_DISPLAY_NAME} to {DBS_DISPLAY_NAME}
+            {item.msLocation?.name} to {item.dbsLocation?.name}
           </Text>
         </View>
         <View style={{ alignItems: "flex-end", marginLeft: 12 }}>
@@ -228,32 +227,16 @@ export default function TripHistory({ navigation }) {
               {getTripStatusLabel(item.status)}
             </Text>
           </View>
-          {/* <Text style={[styles.tripMeta, { marginTop: 6 }]}>
-            {new Date(
-              item.completedAt ||
-                item.acceptedAt ||
-                item.createdAt ||
-                Date.now()
-            ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </Text> */}
+          <Text style={[styles.tripMeta, { marginTop: 6 }]}>
+             {new Date(
+               item.completedAt ||
+                 item.acceptedAt ||
+                 item.createdAt ||
+                 Date.now()
+             ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+           </Text>
         </View>
       </View>
-      {/* <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "space-between",
-          marginTop: 8,
-        }}
-      >
-        <Text style={styles.tripMeta}>
-          Delivered: {item.deliveredQty ?? "-"}
-        </Text>
-        <AppIcon
-          icon="chevron-right"
-          size={16}
-          color={themeRef.current?.colors?.iconDark || "#374151"}
-        />
-      </View> */}
     </TouchableOpacity>
   );
 
@@ -345,11 +328,167 @@ export default function TripHistory({ navigation }) {
           />
         )}
       </View>
+
+      <Modal
+        visible={!!selectedTrip}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedTrip(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "flex-end",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: themeRef.current?.colors?.background || "#fff",
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              padding: 20,
+              maxHeight: "80%",
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 20,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontWeight: "bold",
+                  color: themeRef.current?.colors?.textPrimary,
+                }}
+              >
+                Trip Details
+              </Text>
+              <TouchableOpacity
+                onPress={() => setSelectedTrip(null)}
+                style={{ padding: 4 }}
+              >
+                <AppIcon
+                  icon="close"
+                  size={24}
+                  color={themeRef.current?.colors?.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {selectedTrip && (
+              <View>
+                {/* Trip ID & Status Row */}
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                  <View>
+                    <Text style={{ color: themeRef.current?.colors?.textSecondary, fontSize: 12, marginBottom: 4 }}>Trip ID</Text>
+                    <Text style={{ fontSize: 20, fontWeight: "bold", color: themeRef.current?.colors?.textPrimary }}>
+                      {selectedTrip.tripId}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={{ color: themeRef.current?.colors?.textSecondary, fontSize: 12, marginBottom: 4 }}>Status</Text>
+                    <View
+                      style={{
+                        backgroundColor: getTripStatusColor(selectedTrip.status),
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                        borderRadius: 6,
+                      }}
+                    >
+                      <Text style={{ color: "#fff", fontSize: 12, fontWeight: "bold" }}>
+                        {getTripStatusLabel(selectedTrip.status)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: themeRef.current?.colors?.surfaceMuted || "#eee", marginVertical: 8 }} />
+
+                {/* Locations */}
+                <View style={{ gap: 12, marginBottom: 16 }}>
+                  <View>
+                    <Text style={{ color: themeRef.current?.colors?.textSecondary, fontSize: 12 }}>From</Text>
+                    <Text style={{ fontSize: 16, fontWeight: "500", color: themeRef.current?.colors?.textPrimary }}>
+                      {selectedTrip.msLocation?.name}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={{ color: themeRef.current?.colors?.textSecondary, fontSize: 12 }}>To</Text>
+                    <Text style={{ fontSize: 16, fontWeight: "500", color: themeRef.current?.colors?.textPrimary }}>
+                      {selectedTrip.dbsLocation?.name}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: themeRef.current?.colors?.surfaceMuted || "#eee", marginVertical: 8 }} />
+
+                {/* Timestamps */}
+                <View style={{ gap: 10 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={{ color: themeRef.current?.colors?.textSecondary }}>Created At</Text>
+                    <Text style={{ color: themeRef.current?.colors?.textPrimary, fontWeight: "500" }}>
+                      {formatDateTime(selectedTrip.createdAt)}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={{ color: themeRef.current?.colors?.textSecondary }}>Accepted At</Text>
+                    <Text style={{ color: themeRef.current?.colors?.textPrimary, fontWeight: "500" }}>
+                      {formatDateTime(selectedTrip.acceptedAt)}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={{ color: themeRef.current?.colors?.textSecondary }}>Completed At</Text>
+                    <Text style={{ color: themeRef.current?.colors?.textPrimary, fontWeight: "500" }}>
+                      {formatDateTime(selectedTrip.completedAt)}
+                    </Text>
+                  </View>
+                  {selectedTrip.deliveredQty && (
+                     <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
+                       <Text style={{ color: themeRef.current?.colors?.textSecondary }}>Delivered Qty</Text>
+                       <Text style={{ color: themeRef.current?.colors?.textPrimary, fontWeight: "bold" }}>
+                         {selectedTrip.deliveredQty}
+                       </Text>
+                     </View>
+                  )}
+                </View>
+
+                <AppButton
+                  title="Close"
+                  onPress={() => setSelectedTrip(null)}
+                  style={{ marginTop: 24 }}
+                />
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 // Helpers
+function formatDateTime(iso) {
+  if (!iso) return "-";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "-";
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch (e) {
+    return "-";
+  }
+}
+
 function friendlyDateLabel(isoOrKey) {
   try {
     if (!isoOrKey) return "Unknown";

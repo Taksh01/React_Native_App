@@ -25,6 +25,8 @@ import logBase64 from "../../utils/logBase64";
 import { useThemedStyles } from "../../theme";
 import * as ImagePicker from "expo-image-picker";
 import { TRIP_STATUS } from "../../config/tripStatus";
+import WebSocketService from "../../services/WebSocketService";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 // Trip steps
 const TRIP_STEPS = {
@@ -56,7 +58,7 @@ const DEFAULT_READINGS_STATE = {
   msPostConfirmed: false,
   dbsPreConfirmed: false,
   dbsPostConfirmed: false,
-  msPreReading: 1250.5,
+  msPreReading: null,
   msPostReading: null,
   dbsPreReading: null,
   dbsPostReading: null,
@@ -68,6 +70,21 @@ const DEFAULT_READINGS_STATE = {
 };
 
 // Mock token generation removed
+
+  // Helper to map backend integer steps (0-7) to frontend TRIP_STEPS
+const mapBackendStepToFrontend = (backendStep) => {
+  switch (backendStep) {
+    case 0: return TRIP_STEPS.WAITING_FOR_TRIP; // 0
+    case 1: return TRIP_STEPS.NAVIGATE_TO_MS;   // 2 (Skip 1, go straight to nav)
+    case 2: return TRIP_STEPS.AT_MS_FILLING;    // 3 (Arrived = Start Filling UI)
+    case 3: return TRIP_STEPS.AT_MS_FILLING;    // 3
+    case 4: return TRIP_STEPS.NAVIGATE_TO_DBS;  // 4
+    case 5: return TRIP_STEPS.AT_DBS_DELIVERY;  // 5
+    case 6: return TRIP_STEPS.NAVIGATE_BACK_TO_MS; // 6
+    case 7: return TRIP_STEPS.TRIP_COMPLETED;   // 7
+    default: return TRIP_STEPS.WAITING_FOR_TRIP;
+  }
+};
 
 const deriveStepFromStatus = (status) => {
   const normalized = (status || "").toUpperCase();
@@ -106,7 +123,8 @@ const deriveStepFromStatus = (status) => {
 };
 
 export default function DriverDashboard({ navigation, route }) {
-  const { user } = useAuth();
+  useScreenPermissionSync("DriverDashboard");
+  const { user, token: authToken } = useAuth();
   const themeRef = useRef(null);
 
   const styles = useThemedStyles((theme) => {
@@ -350,9 +368,13 @@ export default function DriverDashboard({ navigation, route }) {
     (async () => {
       try {
         const storedToken = await AsyncStorage.getItem("current_trip_token");
+        console.log("[DriverDashboard] Loaded stored token:", storedToken);
+        
         if (storedToken && mounted) {
-
           setToken(storedToken);
+          // Note: Socket connection is handled by the auth token effect below
+        } else {
+            console.log("[DriverDashboard] No stored token found");
         }
       } catch (e) {
         console.warn("Failed to load persisted token", e);
@@ -360,6 +382,139 @@ export default function DriverDashboard({ navigation, route }) {
     })();
     return () => (mounted = false);
   }, []);
+
+  // Sync socket with Auth Token changes (Login/Logout)
+  useEffect(() => {
+    if (authToken) {
+      WebSocketService.connect(authToken);
+    } else {
+      WebSocketService.disconnect();
+    }
+  }, [authToken]);
+
+  // WebSocket Event Listeners
+  useEffect(() => {
+    if (!authToken) return;
+
+    // 1. MS START
+    const onMsStart = (e) => {
+      // Just notify driver that filling is in progress (optional Toast or visual)
+      console.log("WS: Filling Started", e);
+      console.log("WS PAYLOAD [MS_FILL_START]:", JSON.stringify(e, null, 2));
+      
+      // Validate Trip ID if present
+      const currentTripId = tripData?.tripId || pendingTripData?.tripId;
+      console.log(`[WS DEBUG] Checking MS_FILL_START: Event Trip=${e.trip_id}, App Trip=${currentTripId}`);
+      
+      if (e.trip_id && currentTripId && String(e.trip_id) !== String(currentTripId)) {
+        console.warn(`[WS] Ignored MS_FILL_START for different trip: ${e.trip_id} vs ${currentTripId}`);
+        return;
+      }
+
+      // Ensure we are in correct step
+      if (currentStep === TRIP_STEPS.AT_MS_FILLING) {
+         // Auto-fill available pre-readings if sent
+         if (e.prefill_reading) {
+             setReadingsState(prev => ({
+                 ...prev,
+                 msPreReading: e.prefill_reading
+             }));
+         }
+      }
+    };
+
+    // 2. MS END
+    const onMsEnd = (e) => {
+       console.log("WS: Filling Ended", e);
+       console.log("WS PAYLOAD [MS_FILL_END]:", JSON.stringify(e, null, 2));
+
+       // Validate Trip ID
+       const currentTripId = tripData?.tripId || pendingTripData?.tripId;
+       console.log(`[WS DEBUG] Checking MS_FILL_END: Event Trip=${e.trip_id}, App Trip=${currentTripId}`);
+
+       if (e.trip_id && currentTripId && String(e.trip_id) !== String(currentTripId)) {
+         console.warn(`[WS] Ignored MS_FILL_END for different trip: ${e.trip_id} vs ${currentTripId}`);
+         return;
+       }
+
+       if (currentStep === TRIP_STEPS.AT_MS_FILLING) {
+           // Auto-fill post readings
+           setReadingsState(prev => ({
+               ...prev,
+               msPostReading: e.postfill_reading,
+               // We might also want to show the Qty filled if we had a UI for it
+           }));
+          //  Alert.alert("Available Stock", `Operator finished filling.\nQty: ${e.filled_qty}\nFinal Reading: ${e.postfill_reading}`);
+       }
+    };
+
+    // 3. DBS START
+    const onDbsStart = (e) => {
+        console.log("WS: Decanting Started", e);
+        console.log("WS PAYLOAD [DBS_DECANT_START]:", JSON.stringify(e, null, 2));
+        console.log("WS Payload pre_decant_reading:", e.pre_decant_reading);
+
+        // Validate Trip ID
+        const currentTripId = tripData?.tripId || pendingTripData?.tripId;
+        console.log(`[WS DEBUG] Checking DBS_DECANT_START: Event Trip=${e.trip_id}, App Trip=${currentTripId}`);
+
+        if (e.trip_id && currentTripId && String(e.trip_id) !== String(currentTripId)) {
+          console.warn(`[WS] Ignored DBS_DECANT_START for different trip: ${e.trip_id} vs ${currentTripId}`);
+          return;
+        }
+
+        // Always update state if trip matches, regardless of step
+        // This ensures if driver is slightly behind (Navigating), the data is ready when they arrive
+        if (e.pre_decant_reading) {
+             setReadingsState(prev => ({
+                 ...prev,
+                 dbsPreReading: e.pre_decant_reading,
+             }));
+        }
+    };
+
+    // 4. DBS END
+    const onDbsEnd = (e) => {
+        console.log("WS: Decanting Ended", e);
+        console.log("WS PAYLOAD [DBS_DECANT_END]:", JSON.stringify(e, null, 2));
+
+        // Validate Trip ID
+        const currentTripId = tripData?.tripId || pendingTripData?.tripId;
+        console.log(`[WS DEBUG] Checking DBS_DECANT_END: Event Trip=${e.trip_id}, App Trip=${currentTripId}`);
+
+        if (e.trip_id && currentTripId && String(e.trip_id) !== String(currentTripId)) {
+          console.warn(`[WS] Ignored DBS_DECANT_END for different trip: ${e.trip_id} vs ${currentTripId}`);
+          return;
+        }
+
+        // Always update state if trip matches
+        if (e.post_decant_reading) {
+             setReadingsState(prev => ({
+                 ...prev,
+                 dbsPostReading: e.post_decant_reading
+             }));
+             
+             // Only alert if we are actually at the DBS step or completed
+             if (currentStep === TRIP_STEPS.AT_DBS_DELIVERY || currentStep === TRIP_STEPS.TRIP_COMPLETED) {
+                //  Alert.alert("Decanting Finished", `Operator finished decanting.\nFinal Reading: ${e.post_decant_reading}`);
+             }
+        }
+    };
+
+    // Subscribe
+    const unsubMsStart = WebSocketService.on("MS_FILL_START", onMsStart);
+    const unsubMsEnd = WebSocketService.on("MS_FILL_END", onMsEnd);
+    const unsubDbsStart = WebSocketService.on("DBS_DECANT_START", onDbsStart);
+    const unsubDbsEnd = WebSocketService.on("DBS_DECANT_END", onDbsEnd);
+
+    return () => {
+        unsubMsStart();
+        unsubMsEnd();
+        unsubDbsStart();
+        unsubDbsEnd();
+    };
+
+  }, [authToken, currentStep, tripData, pendingTripData]);
 
   useEffect(() => {
     let mounted = true;
@@ -456,11 +611,190 @@ export default function DriverDashboard({ navigation, route }) {
   useFocusEffect(
     useCallback(() => {
 
+      const checkPendingOffers = async () => {
+        // Only check if we are waiting for a trip and have a token (user is logged in)
+        // Note: 'token' here refers to trip token, 'authToken' is the user session. 
+        // We need 'authToken' to call the API.
+        if (currentStep !== TRIP_STEPS.WAITING_FOR_TRIP) {
+            // Even if we are in a trip, we might want to refresh data in background?
+            // For now, let's allow re-checking if we think we are waiting, 
+            // OR if we want to ensure persistence matches.
+            // But the 'checkPendingOffers' name implies looking for NEW ones.
+            // We need a separate check for "Current Trip Restoration".
+             return;
+        }
+
+        try {
+            console.log("[DriverDashboard] checkPendingOffers: Calling driverApi.getPendingOffers()...");
+            const data = await driverApi.getPendingOffers();
+            console.log("[DriverDashboard] checkPendingOffers response data:", JSON.stringify(data, null, 2));
+            
+            if (data?.pending_offers?.length > 0) {
+                const offer = data.pending_offers[0];
+                console.log("[DriverDashboard] Found pending offer:", offer);
+                
+                // Format directly for showTripAssignmentAlert
+                // We map backend response fields to what our alert expects
+                const tripInfo = {
+                    tripId: offer.stock_request_id, // Important: Use stock_request_id as tripId for acceptance
+                    stock_request_id: offer.stock_request_id,
+                    dbsId: offer.dbs?.name || "Unknown DBS",
+                    msId: offer.ms?.name || "Unknown MS",
+                    quantity: offer.quantity_kg ? `${offer.quantity_kg}` : null,
+                    priority: offer.priority,
+                    ...offer
+                };
+                
+                showTripAssignmentAlert(tripInfo);
+            } else {
+                console.log("[DriverDashboard] No pending offers found in response.");
+            }
+        } catch (error) {
+            console.warn("[DriverDashboard] Error checking pending offers:", error);
+        }
+      };
+
+      // 1. Restore State from Backend (Persistence)
+      const restoreTripState = async () => {
+          console.log("[DriverDashboard] restoreTripState() execution started.");
+          
+          if (!authToken) {
+             console.log("[DriverDashboard] restoreTripState aborted: No authToken available.");
+             return false;
+          }
+
+          try {
+              let currentTripToken = token;
+              if (!currentTripToken) {
+                  currentTripToken = await AsyncStorage.getItem("current_trip_token");
+              }
+              console.log("[DriverDashboard] Calling driverApi.resumeTrip() with token:", currentTripToken);
+              const response = await driverApi.resumeTrip({ token: currentTripToken });
+              
+              console.log("[DriverDashboard] resumeTrip response:", JSON.stringify(response, null, 2));
+
+              if (response && response.hasActiveTrip && response.trip) {
+                  const trip = response.trip;
+                  console.log(`[DriverDashboard] Active trip found! Trip ID: ${trip.id}, Status: ${trip.status}`);
+                  
+                  // Restore Token
+                  if (trip.token) {
+                      console.log("[DriverDashboard] Restoring token:", trip.token);
+                      setToken(trip.token);
+                      AsyncStorage.setItem("current_trip_token", trip.token).catch(console.warn);
+                  } else {
+                      console.warn("[DriverDashboard] Active trip found but NO TOKEN in response!");
+                  }
+
+                  // Restore Trip Data
+                  const restoredTripData = {
+                      tripId: trip.id,
+                      stockRequestId: trip.tripDetails?.stockRequestId,
+                      status: trip.status,
+                      msLocation: trip.tripDetails?.ms,
+                      dbsLocation: trip.tripDetails?.dbs,
+                      vehicle: trip.tripDetails?.vehicle,
+                      ...trip.tripDetails 
+                  };
+                  console.log("[DriverDashboard] Setting tripData:", JSON.stringify(restoredTripData, null, 2));
+                  setTripData(restoredTripData);
+
+                  // Restore Readings Step Data
+                  // Check confirmation flags from 'stepData' if available, or infer from data
+                  const stepData = trip.stepData || {};
+
+                  if (trip.msFillingData) {
+                      console.log("[DriverDashboard] Restoring msFillingData:", trip.msFillingData);
+                      
+                      setReadingsState(prev => ({
+                          ...prev,
+                          // MS Pre
+                          msPreReading: trip.msFillingData.prefill_mfm, 
+                          msPreConfirmed: stepData.ms_pre_reading_done && stepData.ms_pre_photo_uploaded,
+                          
+                          // MS Post
+                          msPostReading: trip.msFillingData.postfill_mfm,
+                          msPostConfirmed: stepData.ms_filling_complete && stepData.ms_post_photo_uploaded,
+
+                          // If photos are present in response (URLs), we might want to flag them as done?
+                          // For now, if confirmed is true, UI usually hides the photo button or shows checking state.
+                          // But if we need to show the image, we'd need to fetch it (not implemented yet).
+                          // Just ensuring 'Confirmed' state is restored prevents the "Confirm" button from showing again.
+                      }));
+                      
+                  }
+
+                  // Also handle DBS data if present
+                  // Also handle DBS data if present
+                  if (trip.dbsDecantingData) {
+                       console.log("DEBUG: DBS DATA CHECK entered", trip.dbsDecantingData);
+                           setReadingsState(prev => ({
+                              ...prev,
+                              dbsPreReading: trip.dbsDecantingData.pre_dec_reading,
+                              dbsPreConfirmed: stepData.dbs_pre_reading_done && stepData.dbs_pre_photo_uploaded,
+                              
+                              dbsPostReading: trip.dbsDecantingData.post_dec_reading,
+                              dbsPostConfirmed: stepData.dbs_decanting_complete && stepData.dbs_post_photo_uploaded,
+                           }));
+                      }
+
+
+                  // Restore UI Step
+                  let restoredStep = TRIP_STEPS.WAITING_FOR_TRIP;
+                  
+                  if (trip.currentStep !== undefined && trip.currentStep !== null) {
+                      restoredStep = mapBackendStepToFrontend(trip.currentStep);
+                      console.log(`[DriverDashboard] Mapped Backend Step ${trip.currentStep} -> Frontend Step ${restoredStep}`);
+                  } else {
+                      restoredStep = deriveStepFromStatus(trip.status);
+                      console.log(`[DriverDashboard] Derived Frontend Step ${restoredStep} from Status ${trip.status}`);
+                  }
+                  
+                  console.log("[DriverDashboard] Setting currentStep to:", restoredStep);
+                  setCurrentStep(restoredStep);
+                  return true; // Found and restored trip
+
+              } else {
+                  console.log("[DriverDashboard] resumeTrip result: No active trip logic triggered (hasActiveTrip is false or trip is null).");
+                  return false;
+              }
+          } catch (e) {
+              console.warn("[DriverDashboard] restoreTripState failed/error:", e);
+              return false;
+          }
+      };
+
+      // Execute restoration logic only if we are in initial waiting state or undefined (first load)
+      console.log(`[DriverDashboard] Focus Effect Triggered. AuthToken: ${!!authToken}, CurrentStep: ${currentStep}`);
       
-      // 1. Check route params
+      if (authToken && (currentStep === TRIP_STEPS.WAITING_FOR_TRIP || currentStep === undefined)) {
+          // Check active trip first.
+          restoreTripState().then((restored) => {
+              if (!restored) {
+                  console.log("[DriverDashboard] Persistence check returned false. Checking for NEW pending offers...");
+                  checkPendingOffers();
+              } else {
+                  console.log("[DriverDashboard] Trip successfully restored from persistence. Skipping pending offers check.");
+              }
+          });
+      } else {
+          console.log("[DriverDashboard] Skipping persistence/offers check. Logic: ", {
+             hasAuth: !!authToken,
+             isWaiting: currentStep === TRIP_STEPS.WAITING_FOR_TRIP,
+             isUndefined: currentStep === undefined
+          });
+      }
+      
+      // 2. Check pending offers via API (Legacy/New Invite)
+      // Moved inside the promise chain above or executed efficiently
+      // We keep this here for invalidations or simple updates
+      // if (authToken && currentStep === TRIP_STEPS.WAITING_FOR_TRIP) {
+      //     checkPendingOffers();
+      // }
+      
+      // 2. Check route params (Legacy/Notification click)
       const params = route?.params;
       if (params?.fromNotification && params?.tripId) {
-
         
         // If explicitly opened from notification, we should show it even if step is loading
         // But we should still check if we are already in a trip (step > 0) to avoid conflict
@@ -482,7 +816,7 @@ export default function DriverDashboard({ navigation, route }) {
         }
       }
 
-      // 2. Check NotificationService last event
+      // 3. Check NotificationService last event (Legacy/Background to Foreground)
       const NotificationService = require("../../services/NotificationService").default;
       const lastEvent = NotificationService.getLastEvent("trip_assignment");
       
@@ -493,7 +827,7 @@ export default function DriverDashboard({ navigation, route }) {
           NotificationService.clearLastEvent("trip_assignment");
         }
       }
-    }, [route?.params, currentStep, showTripAssignmentAlert, navigation])
+    }, [route?.params, currentStep, showTripAssignmentAlert, navigation, authToken])
   );
 
   // State to hold pending trip data from notification
@@ -558,7 +892,7 @@ export default function DriverDashboard({ navigation, route }) {
       
       await driverApi.rejectTrip({
         tripId: tripIdToReject,
-        reason: rejectReason || "Driver declined",
+        reason: rejectReason,
       });
 
       
@@ -599,54 +933,47 @@ export default function DriverDashboard({ navigation, route }) {
 
     return () => unsubscribe();
   }, [currentStep, showTripAssignmentAlert]);
-
-
   const acceptTrip = useCallback(async (tripInfo = null) => {
     // Use tripInfo from notification or fallback to route params
     const tripData = tripInfo || pendingTripData || route?.params || {};
-    const tripId = tripData.tripId;
+    // This is the STOCK REQUEST ID from the notification (e.g. 108)
+    const stockRequestId = tripData.tripId || tripData.stock_request_id;
     
-
+    console.log("[DriverDashboard] acceptTrip triggered.");
+    console.log("[DriverDashboard] stockRequestId (notification ID):", stockRequestId);
     
     setLoading((prev) => ({ ...prev, trip: true }));
-    setPendingTripData(null); // Clear pending data
+    setPendingTripData(null); 
 
     try {
-      // 1) Attempt to accept trip via backend
-      // response we expect:{
-      //   "ok": true,
-      //   "tripId": "TRIP-001",
-      //   "status": "accepted",
-      //   "token": "TKN-TRIP-001-7-1730707200",
-      //   "tokenData": {
-      //     "token": "TKN-TRIP-001-7-1730707200",
-      //     "tripId": "TRIP-001",
-      //     "driverId": "7",
-      //     "status": "ACTIVE",
-      //     "createdAt": "2025-11-04T10:30:00.123456",
-      //     "validUntil": "2025-11-04T10:30:00.123456"
-      //   }
-      // }
+      // 1) Submit Stock Request ID to backend
       const response = await driverApi.acceptTrip({
-        tripId: tripId,
+        stock_request_id: stockRequestId,
       });
 
       const serverTrip = response?.trip || response || null;
       
-      // Build trip data from notification + server response
+      // CRITICAL FIX: The notification sends 'stock_request_id' (e.g. 108), but the server
+      // returns the actual 'trip_id' (e.g. 36). We must use the SERVER'S ID.
+      
+      const realTripId = serverTrip?.tripId || serverTrip?.id || serverTrip?.trip_id; 
+      
+      console.log(`[DriverDashboard] ID CHECK: StockReqId=${stockRequestId} vs RealTripId=${realTripId}`);
+
       const initialTrip = {
-        tripId: tripId,
-        msLocation: { name: tripData.msId || "MS Station", address: "Loading..." },
-        dbsLocation: { name: tripData.dbsId || "DBS Station", address: "Loading..." },
+        tripId: realTripId || stockRequestId, // Prefer real ID, fallback if missing
+        stockRequestId: stockRequestId,       // Keep original for reference
+        msLocation: { name: tripData.msId, address: "Loading..." },
+        dbsLocation: { name: tripData.dbsId, address: "Loading..." },
         estimatedDistance: "Calculating...",
         estimatedTime: "Calculating...",
-        status: "ASSIGNED",
+        status: serverTrip?.status || "ASSIGNED",
         ...tripData,
         ...serverTrip,
+        tripId: realTripId || stockRequestId, // Ensure this wins
       };
 
-      const resolvedToken =
-        response?.driverToken;
+      const resolvedToken = response?.token_number || response?.driverToken || tripData.token_number;
 
       setToken(resolvedToken);
       
@@ -662,51 +989,25 @@ export default function DriverDashboard({ navigation, route }) {
 
       try {
         if (resolvedToken) {
-          // ! here is response we expect:
-          //           {
-          //   "tripId": "TRIP-001",              // ← The trip ID extracted from token
-          //   "status": "ACCEPTED",              // ← Current trip status (CREATED, ACCEPTED, ARRIVED, STARTED, ENDED, CONFIRMED, COMPLETED, etc.)
-          //   "tokenStatus": "ACTIVE",           // ← Token validity status (ACTIVE, EXPIRED, CANCELLED)
-          //   "trip": {                          // ← Complete trip object with all details
-          //     "id": "TRIP-001",
-          //     "status": "ACCEPTED",
-          //     "msId": "MS-12",
-          //     "vehicle": "GJ-01-AB-1234",
-          //     "driver": "Rakesh Patel",
-          //     "driverId": "7",
-          //     "pre": null,                     // ← Pre-decant readings (set when arrives at DBS)
-          //     "post": null,                    // ← Post-decant readings (set after delivery)
-          //     "startTime": null,               // ← Decanting start time
-          //     "endTime": null,                 // ← Decanting end time
-          //     "deliveredQty": null,            // ← Final delivered quantity
-          //     "operatorSig": null,             // ← DBS operator signature
-          //     "driverSig": null,               // ← Driver signature
-          //     "acceptedAt": "2025-11-04T10:30:00.123456",  // ← When trip was accepted
-          //     "msCompleted": false,            // ← MS operations complete?
-          //     "msCompletedAt": null            // ← When MS operations completed
-          //   }
-          // }
-          const statusResponse = await driverApi.getTripStatus({
-            token: resolvedToken,
-          });
-          if (statusResponse) {
-            const statusTrip = statusResponse?.trip || statusResponse;
-            if (statusTrip) {
-              resolvedTrip = { ...resolvedTrip, ...statusTrip };
-            }
-            const resolvedStatus =
-              statusResponse?.status ?? resolvedTrip.status;
-            if (resolvedStatus) {
-              resolvedTrip.status = resolvedStatus;
-              nextStep = deriveStepFromStatus(resolvedStatus);
-            }
-          }
+           console.log("[DriverDashboard] Fetching full status for realTripId:", realTripId);
+           const statusResponse = await driverApi.getTripStatus({
+             token: resolvedToken,
+           });
+           
+           if (statusResponse) {
+             const statusTrip = statusResponse?.trip || statusResponse;
+             if (statusTrip) {
+               resolvedTrip = { ...resolvedTrip, ...statusTrip };
+             }
+             const resolvedStatus = statusResponse?.status ?? resolvedTrip.status;
+             if (resolvedStatus) {
+                resolvedTrip.status = resolvedStatus;
+                nextStep = deriveStepFromStatus(resolvedStatus);
+             }
+           }
         }
       } catch (statusError) {
-        console.warn(
-          "Trip status fetch failed, continuing with fallback data.",
-          statusError?.message || statusError
-        );
+         console.warn("Trip status fetch failed", statusError);
       }
 
       setTripData(resolvedTrip);
@@ -731,16 +1032,23 @@ export default function DriverDashboard({ navigation, route }) {
     setLoading((prev) => ({ ...prev, navigation: true }));
     try {
       if (token) {
+        console.log("[DriverDashboard] handleArrivedAtMS called with token:", token);
         await driverApi.confirmArrivalAtMS({ token });
+        console.log("[DriverDashboard] confirmArrivalAtMS success.");
+        // Only update step if API success
+        setCurrentStep(TRIP_STEPS.AT_MS_FILLING);
+      } else {
+        Alert.alert("Error", "No active trip token found. Cannot confirm arrival.");
       }
     } catch (error) {
-      console.warn(
-        "Failed to confirm MS arrival; continuing in fallback mode.",
-        error?.message || error
+      console.warn("Failed to confirm MS arrival.", error?.message || error);
+      Alert.alert(
+        "Error", 
+        "Failed to confirm arrival. Please check your connection and try again.",
+        [{ text: "OK" }]
       );
     } finally {
       setLoading((prev) => ({ ...prev, navigation: false }));
-      setCurrentStep(TRIP_STEPS.AT_MS_FILLING);
     }
   }, [token]);
 
@@ -752,16 +1060,23 @@ export default function DriverDashboard({ navigation, route }) {
     setLoading((prev) => ({ ...prev, navigation: true }));
     try {
       if (token) {
+        console.log("[DriverDashboard] handleArrivedAtDBS called with token:", token);
         await driverApi.confirmArrivalAtDBS({ token });
+        console.log("[DriverDashboard] confirmArrivalAtDBS success.");
+        // Only update step if API success
+        setCurrentStep(TRIP_STEPS.AT_DBS_DELIVERY);
+      } else {
+        Alert.alert("Error", "Token missing. Cannot confirm arrival.");
       }
     } catch (error) {
-      console.warn(
-        "Failed to confirm DBS arrival; continuing in fallback mode.",
-        error?.message || error
+      console.warn("Failed to confirm DBS arrival.", error?.message || error);
+      Alert.alert(
+        "Error", 
+        "Failed to confirm arrival at DBS. Please try again.",
+        [{ text: "OK" }]
       );
     } finally {
       setLoading((prev) => ({ ...prev, navigation: false }));
-      setCurrentStep(TRIP_STEPS.AT_DBS_DELIVERY);
     }
   }, [token]);
 
@@ -769,20 +1084,27 @@ export default function DriverDashboard({ navigation, route }) {
     setCurrentStep(TRIP_STEPS.NAVIGATE_BACK_TO_MS);
   };
 
-  const handleReturnedToMS = useCallback(async () => {
+  const finalArrival = useCallback(async () => {
     setLoading((prev) => ({ ...prev, navigation: true }));
     try {
       if (token) {
+        console.log("[DriverDashboard] finalArrival called with token:", token);
         await driverApi.completeTrip({ token });
+        console.log("[DriverDashboard] finalArrival (Returned to MS) success.");
+        // Only update step if API success
+        setCurrentStep(TRIP_STEPS.TRIP_COMPLETED);
+      } else {
+         Alert.alert("Error", "Token missing. Cannot complete trip.");
       }
     } catch (error) {
-      console.warn(
-        "Failed to mark trip complete; continuing in fallback mode.",
-        error?.message || error
+      console.warn("Failed to mark trip complete.", error?.message || error);
+      Alert.alert(
+        "Error", 
+        "Failed to complete trip. Please try again.",
+        [{ text: "OK" }]
       );
     } finally {
       setLoading((prev) => ({ ...prev, navigation: false }));
-      setCurrentStep(TRIP_STEPS.TRIP_COMPLETED);
     }
   }, [token]);
 
@@ -802,6 +1124,8 @@ export default function DriverDashboard({ navigation, route }) {
 
   // Meter reading handlers
   const handleConfirmPreReading = async (stationType) => {
+    console.log(`[DriverDashboard] handleConfirmPreReading TRIGGERED for ${stationType}`);
+    
     const isMS = stationType === "MS";
     const fallbackReading = isMS
       ? readingsState.msPreReading
@@ -821,6 +1145,7 @@ export default function DriverDashboard({ navigation, route }) {
     setLoading((prev) => ({ ...prev, readings: true }));
     try {
       if (token) {
+        console.log("[DriverDashboard] Calling confirmMeterReading with token:", token);
         await driverApi.confirmMeterReading({
           token,
           stationType,
@@ -831,33 +1156,29 @@ export default function DriverDashboard({ navigation, route }) {
             ? readingsState.msPrePhotoBase64
             : readingsState.dbsPrePhotoBase64,
         });
+
+        // Only update state if API call succeeds
+        if (isMS) {
+          setReadingsState((prev) => ({ ...prev, msPreConfirmed: true }));
+        } else {
+          setReadingsState((prev) => ({ ...prev, dbsPreConfirmed: true }));
+        }
+      } else {
+        console.error("[DriverDashboard] Token is missing! Cannot confirm reading.");
+        Alert.alert("Error", "Trip token is missing. Please try refreshing or re-opening the app.");
       }
     } catch (error) {
       console.warn(
-        `Failed to confirm ${stationType} pre reading; continuing locally.`,
+        `Failed to confirm ${stationType} pre reading.`,
         error?.message || error
+      );
+      Alert.alert(
+        "Error",
+        `Failed to confirm reading. Please try again.\n\n${error?.message || "Check connection"}`,
+        [{ text: "OK" }]
       );
     } finally {
       setLoading((prev) => ({ ...prev, readings: false }));
-    }
-
-    if (isMS) {
-      setReadingsState((prev) => ({ ...prev, msPreConfirmed: true }));
-      setTimeout(() => {
-        setReadingsState((prev) => ({
-          ...prev,
-          msPostReading: prev.msPostReading ?? 1750.8,
-          dbsPreReading: prev.dbsPreReading ?? prev.msPostReading ?? 1750.8,
-        }));
-      }, 3000);
-    } else {
-      setReadingsState((prev) => ({ ...prev, dbsPreConfirmed: true }));
-      setTimeout(() => {
-        setReadingsState((prev) => ({
-          ...prev,
-          dbsPostReading: prev.dbsPostReading ?? 1250.5,
-        }));
-      }, 3000);
     }
   };
 
@@ -908,6 +1229,7 @@ export default function DriverDashboard({ navigation, route }) {
     setLoading((prev) => ({ ...prev, readings: true }));
     try {
       if (token) {
+        console.log("[DriverDashboard] Calling confirmMeterReading (POST) with token:", token);
         await driverApi.confirmMeterReading({
           token,
           stationType,
@@ -918,20 +1240,29 @@ export default function DriverDashboard({ navigation, route }) {
             ? readingsState.msPostPhotoBase64
             : readingsState.dbsPostPhotoBase64,
         });
+
+        // Only update state if API call succeeds
+        if (isMS) {
+          setReadingsState((prev) => ({ ...prev, msPostConfirmed: true }));
+        } else {
+          setReadingsState((prev) => ({ ...prev, dbsPostConfirmed: true }));
+        }
+      } else {
+        console.error("[DriverDashboard] Token is missing! Cannot confirm post reading.");
+        Alert.alert("Error", "Trip token is missing. Please refresh.");
       }
     } catch (error) {
       console.warn(
-        `Failed to confirm ${stationType} post reading; continuing locally.`,
+        `Failed to confirm ${stationType} post reading.`,
         error?.message || error
+      );
+      Alert.alert(
+        "Error",
+        `Failed to confirm reading. Please try again.\n\n${error?.message || "Check connection"}`,
+        [{ text: "OK" }]
       );
     } finally {
       setLoading((prev) => ({ ...prev, readings: false }));
-    }
-
-    if (isMS) {
-      setReadingsState((prev) => ({ ...prev, msPostConfirmed: true }));
-    } else {
-      setReadingsState((prev) => ({ ...prev, dbsPostConfirmed: true }));
     }
   };
 
@@ -992,24 +1323,30 @@ export default function DriverDashboard({ navigation, route }) {
       <View style={styles.navigationContainer}>
         <MapView
           destination={destinationData}
-          currentLocation={
-            lastKnownLocation || { latitude: 12.9716, longitude: 77.5946 }
-          }
+          currentLocation={lastKnownLocation}
           onLocationUpdate={(location) => {
-            setLastKnownLocation(location);
-            if (token) {
-              driverApi
-                .updateLocation({
-                  token,
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                })
-                .catch((error) =>
-                  console.warn(
-                    "Failed to push location update; will retry on next tick.",
-                    error?.message || error
-                  )
-                );
+            const now = Date.now();
+            const lastUpdate = themeRef.current?.lastLocationUpdate || 0;
+            
+            // Throttle updates to every 3 seconds to prevent UI unresponsiveness
+            if (now - lastUpdate > 3000) {
+              if(themeRef.current) themeRef.current.lastLocationUpdate = now;
+              
+              setLastKnownLocation(location);
+              if (token) {
+                driverApi
+                  .updateLocation({
+                    token,
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                  })
+                  .catch((error) =>
+                    console.warn(
+                      "Failed to push location update; will retry on next tick.",
+                      error?.message || error
+                    )
+                  );
+              }
             }
           }}
         />
@@ -1072,14 +1409,15 @@ export default function DriverDashboard({ navigation, route }) {
                   title="Confirm"
                   onPress={() => handleConfirmPreReading(stationType)}
                   variant="success"
-                  disabled={loading.readings}
+                  disabled={loading.readings || !preReading}
                   loading={loading.readings}
                   style={{
                     paddingVertical: themeRef.current?.spacing(2) || 8,
                     paddingHorizontal: themeRef.current?.spacing(3) || 12,
+                    opacity: !preReading ? 0.5 : 1, 
                   }}
                 />
-                <AppButton
+                {/* <AppButton
                   title="Reject"
                   onPress={() => handleRejectReading(stationType, "Pre")}
                   variant="danger"
@@ -1088,7 +1426,7 @@ export default function DriverDashboard({ navigation, route }) {
                     paddingVertical: themeRef.current?.spacing(2) || 8,
                     paddingHorizontal: themeRef.current?.spacing(3) || 12,
                   }}
-                />
+                /> */}
                 {/* Camera button: disabled after capture */}
                 {(() => {
                   const preKey = isMS
@@ -1166,7 +1504,7 @@ export default function DriverDashboard({ navigation, route }) {
                         paddingHorizontal: themeRef.current?.spacing(3) || 12,
                       }}
                     />
-                    <AppButton
+                    {/* <AppButton
                       title="Reject"
                       onPress={() => handleRejectReading(stationType, "Post")}
                       variant="danger"
@@ -1175,7 +1513,7 @@ export default function DriverDashboard({ navigation, route }) {
                         paddingVertical: themeRef.current?.spacing(2) || 8,
                         paddingHorizontal: themeRef.current?.spacing(3) || 12,
                       }}
-                    />
+                    /> */}
                     {(() => {
                       const postKey = isMS
                         ? "msPostPhotoBase64"
@@ -1304,7 +1642,7 @@ export default function DriverDashboard({ navigation, route }) {
       case TRIP_STEPS.NAVIGATE_BACK_TO_MS:
         return renderNavigationView(
           tripData?.msLocation?.name,
-          handleReturnedToMS
+          finalArrival
         );
 
       case TRIP_STEPS.TRIP_COMPLETED:

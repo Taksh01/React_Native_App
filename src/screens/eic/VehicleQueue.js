@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useThemedStyles } from "../../theme";
 // Removed mock import - will use real API or fallback data
 import AppIcon from "../../components/AppIcon";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 const BayCard = ({ bay, onAssign, styles }) => {
   const getStatusColor = () => {
@@ -118,6 +119,7 @@ const VehicleCard = ({ vehicle, onAssign, styles }) => {
 };
 
 export default function VehicleQueue() {
+  useScreenPermissionSync("VehicleQueue");
   const [vehicles, setVehicles] = useState([]);
   const [bays, setBays] = useState([]);
 

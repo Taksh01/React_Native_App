@@ -15,8 +15,10 @@ import { useQuery } from "@tanstack/react-query";
 import VehicleTrackingAPI from "../../api/vehicleTracking";
 import AppButton from "../../components/AppButton";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 export default function VehicleTracking() {
+  useScreenPermissionSync("VehicleTracking");
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [realTimeEnabled] = useState(false);

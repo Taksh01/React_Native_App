@@ -28,6 +28,7 @@ import {
 import { useAuth } from "../../store/auth";
 import { useThemedStyles } from "../../theme";
 import AppSwitch from "../../components/AppSwitch";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 const createInitialApprovalForm = (driver) => ({
   shiftStart: driver?.requestedShiftStart || "",
@@ -41,6 +42,7 @@ const createInitialApprovalForm = (driver) => ({
 });
 
 export default function DriverApprovals() {
+  useScreenPermissionSync("DriverApprovals");
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -49,7 +51,7 @@ export default function DriverApprovals() {
   const [rejectionNotes, setRejectionNotes] = useState("");
 
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, syncPermissions } = useAuth();
   const themeRef = useRef(null);
 
   const styles = useThemedStyles((theme) => {
@@ -537,12 +539,12 @@ export default function DriverApprovals() {
           {item.requestedShiftEnd})
         </Text>
       </View>
-      <View style={styles.row}>
+      {/* <View style={styles.row}>
         <Text style={styles.rowLabel}>Training</Text>
         <Text style={styles.rowValue}>
           {item.trainingCompleted ? "Completed" : "Pending"}
         </Text>
-      </View>
+      </View> */}
       {/* {item.trainingModules?.length ? (
         <View style={styles.trainingContainer}>
           {item.trainingModules.map((module) => (

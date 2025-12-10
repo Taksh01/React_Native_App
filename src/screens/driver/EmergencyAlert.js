@@ -7,12 +7,17 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  TextInput,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AppIcon from "../../components/AppIcon";
 import { useThemedStyles } from "../../theme";
 import { driverApi } from "../../lib/driverApi";
 import { useAuth } from "../../store/auth";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 const EMERGENCY_TYPES = [
   {
@@ -20,66 +25,71 @@ const EMERGENCY_TYPES = [
     title: "Gas Leakage",
     icon: "emergencyGas",
     color: "#FF3B30",
+    severity: "CRITICAL",
   },
   {
     id: "tyre_puncture",
     title: "Tyre Puncture",
     icon: "emergencyTyre",
     color: "#FF9500",
+    severity: "MEDIUM",
   },
   {
     id: "engine_problem",
     title: "Engine Problem",
     icon: "emergencyEngine",
     color: "#FF9500",
+    severity: "HIGH",
   },
   {
     id: "accident",
     title: "Accident",
     icon: "emergencyAccident",
     color: "#FF3B30",
+    severity: "CRITICAL",
   },
   {
     id: "vehicle_breakdown",
     title: "Vehicle Breakdown",
     icon: "emergencyBreakdown",
     color: "#FF9500",
+    severity: "HIGH",
   },
   {
     id: "medical_emergency",
     title: "Medical Emergency",
     icon: "emergencyMedical",
     color: "#FF3B30",
+    severity: "CRITICAL",
   },
   {
     id: "security_issue",
     title: "Security Issue",
     icon: "emergencySecurity",
     color: "#FF3B30",
+    severity: "CRITICAL",
   },
-  { id: "other", title: "Other Issue", icon: "info", color: "#8E8E93" },
+  { 
+    id: "other", 
+    title: "Other Issue", 
+    icon: "info", 
+    color: "#8E8E93",
+    severity: "LOW" 
+  },
 ];
 
 export default function EmergencyAlert({ navigation, route }) {
-  const { user } = useAuth();
+  useScreenPermissionSync("EmergencyAlert");
   const [selectedEmergency, setSelectedEmergency] = useState(null);
   const [loading, setLoading] = useState(false);
+  
+  // States for "Other Issue" input
+  const [otherModalVisible, setOtherModalVisible] = useState(false);
+  const [otherReason, setOtherReason] = useState("");
+
   const themeRef = useRef(null);
 
   const activeToken = route?.params?.token ?? null;
-  const activeTripId = route?.params?.tripId ?? null;
-  const presetLocation = route?.params?.location;
-
-  const resolveLocation = () => {
-    if (
-      presetLocation &&
-      typeof presetLocation?.latitude === "number" &&
-      typeof presetLocation?.longitude === "number"
-    ) {
-      return presetLocation;
-    }
-    return { latitude: 0, longitude: 0 };
-  };
 
   const styles = useThemedStyles((theme) => {
     themeRef.current = theme;
@@ -193,15 +203,83 @@ export default function EmergencyAlert({ navigation, route }) {
         marginTop: theme.spacing(2),
         textAlign: "center",
       },
+      // Modal Styles
+      modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: theme.spacing(4),
+      },
+      modalContent: {
+        backgroundColor: theme.colors.surfaceElevated,
+        borderRadius: theme.radii.lg,
+        padding: theme.spacing(6),
+        width: "100%",
+        maxWidth: 400,
+        ...theme.shadows.level3,
+      },
+      modalTitle: {
+        fontSize: theme.typography.sizes.heading,
+        fontWeight: theme.typography.weightBold,
+        color: theme.colors.textPrimary,
+        marginBottom: theme.spacing(4),
+        textAlign: "center",
+      },
+      modalInput: {
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.radii.md,
+        padding: theme.spacing(3),
+        fontSize: theme.typography.sizes.body,
+        color: theme.colors.textPrimary,
+        minHeight: 100,
+        textAlignVertical: "top",
+        marginBottom: theme.spacing(6),
+        backgroundColor: theme.colors.surface,
+      },
+      modalButtons: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        gap: theme.spacing(4),
+      },
+      modalButton: {
+        flex: 1,
+        paddingVertical: theme.spacing(3),
+        borderRadius: theme.radii.md,
+        alignItems: "center",
+      },
+      modalCancel: {
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.neutralGray,
+      },
+      modalSubmit: {
+        backgroundColor: theme.colors.emergency,
+      },
+      modalCancelText: {
+        color: theme.colors.textSecondary,
+        fontWeight: theme.typography.weightSemiBold,
+      },
+      modalSubmitText: {
+        color: "white",
+        fontWeight: theme.typography.weightBold,
+      },
     });
   });
 
   const handleEmergencySelect = (emergency) => {
     setSelectedEmergency(emergency);
 
+    if (emergency.id === "other") {
+      setOtherReason("");
+      setOtherModalVisible(true);
+      return;
+    }
+
     Alert.alert(
       emergency.title,
-      "Are you sure you want to report this emergency? This will immediately notify the control center.",
+      "Are you sure you want to report this emergency?",
       [
         {
           text: "Cancel",
@@ -217,41 +295,53 @@ export default function EmergencyAlert({ navigation, route }) {
     );
   };
 
-  const reportEmergency = async (emergency) => {
+  const reportEmergency = async (emergency, customType = null) => {
     setLoading(true);
-    try {
-      const description = activeTripId
-        ? `${emergency.title} reported during trip ${activeTripId}`
-        : `${emergency.title} reported from driver app`;
+    // If customType is present (from Other input), use it as 'type'. 
+    // Otherwise use emergency.title.
+    const typeToSend = customType || emergency.title;
 
-      await driverApi.reportEmergency({
+    try {
+      const response = await driverApi.reportEmergency({
         token: activeToken,
-        driverId: user?.id,
-        emergencyType: emergency.id,
-        location: resolveLocation(),
-        description,
+        type: typeToSend,
+        severity: emergency.severity,
       });
 
-      Alert.alert(
-        "Emergency Reported",
-        `${emergency.title} has been reported to the control center. Help is on the way.`,
-        [{ text: "OK", onPress: () => navigation.goBack() }]
-      );
+      if (response && response.success) {
+        setOtherModalVisible(false);
+        Alert.alert(
+          "Emergency Reported",
+          response.message || "Control center has been notified.",
+          [{ text: "OK", onPress: () => navigation.goBack() }]
+        );
+      } else {
+        throw new Error(response?.message || "Please try again.");
+      }
     } catch (apiError) {
-      console.warn(
-        "Emergency reporting failed; falling back to offline acknowledgement.",
-        apiError?.message || apiError
+      console.warn("Emergency reporting failed:", apiError?.message);
+      
+      setOtherModalVisible(false);
+      
+      Alert.alert(
+        "Report Failed",
+        apiError?.message || "Could not report emergency. Please check your connection and try again.",
+        [{ text: "OK" }]
       );
-
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      Alert.alert("Emergency Reported", `Control center will be notified.`, [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
     } finally {
       setLoading(false);
       setSelectedEmergency(null);
     }
+  };
+
+  const handleOtherSubmit = () => {
+    if (!otherReason.trim()) {
+      Alert.alert("Required", "Please specify the issue.");
+      return;
+    }
+    // Call reportEmergency with the currently selected 'Other' emergency object,
+    // but pass our custom reason as the specific type override.
+    reportEmergency(selectedEmergency, otherReason.trim());
   };
 
   const renderEmergencyCard = (emergency) => (
@@ -341,6 +431,54 @@ export default function EmergencyAlert({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Modal for Other Issue Input */}
+      <Modal
+        visible={otherModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+            setOtherModalVisible(false);
+            setSelectedEmergency(null);
+        }}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Specify Other Issue</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Please describe the emergency..."
+              placeholderTextColor="#999"
+              value={otherReason}
+              onChangeText={setOtherReason}
+              multiline
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.modalCancel]}
+                onPress={() => {
+                  setOtherModalVisible(false);
+                  setSelectedEmergency(null);
+                }}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.modalSubmit]}
+                onPress={handleOtherSubmit}
+              >
+                <Text style={styles.modalSubmitText}>Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
     </SafeAreaView>
   );
 }

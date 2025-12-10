@@ -17,6 +17,7 @@ import {
   getStockStatusColor,
   getStockStatusLabel,
 } from "../../config/stockStatus";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 
 
@@ -55,6 +56,7 @@ const formatCreatedAt = (isoStr) => {
 };
 
 export default function RequestStatus() {
+  useScreenPermissionSync("RequestStatus");
   const styles = useThemedStyles((theme) =>
     StyleSheet.create({
       safe: {
@@ -213,12 +215,12 @@ export default function RequestStatus() {
         </View>
 
         <View style={styles.detailsContainer}>
-          <View style={styles.detailRow}>
+          {/* <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Quantity:</Text>
             <Text style={styles.detailValue}>
               {item.requested_qty_kg.toLocaleString()} kg
             </Text>
-          </View>
+          </View> */}
           
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Required By:</Text>

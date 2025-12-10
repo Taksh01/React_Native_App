@@ -15,6 +15,7 @@ import { apiGetNetworkOverview } from "../../lib/eicApi";
 import AppIcon from "../../components/AppIcon";
 import AppButton from "../../components/AppButton";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 const getStatusColors = (statusRaw) => {
   const s = (statusRaw || "PENDING").toUpperCase();
@@ -146,6 +147,7 @@ const buildSections = (trips = []) => {
 };
 
 export default function NetworkDashboard() {
+  useScreenPermissionSync("NetworkDashboard");
   const [selectedStation, setSelectedStation] = useState(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
@@ -599,10 +601,10 @@ export default function NetworkDashboard() {
 
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
-              {selectedStation?.dbsName || "DBS Station"}
+              {selectedStation?.dbsName}
             </Text>
             <Text style={styles.modalSubtitle}>
-              {selectedStation?.location || "Trip Schedule Overview"}
+              {selectedStation?.location}
             </Text>
           </View>
 
@@ -640,7 +642,7 @@ export default function NetworkDashboard() {
 
                     <View style={styles.tripBottomRow}>
                       <Text style={styles.tripRoute}>
-                        {item.msName || "MS"} → {item.dbsName || "DBS"}
+                        {item.msName} → {item.dbsName}
                       </Text>
                       <View style={styles.timeBadge}>
                         <AppIcon icon="clock" size={14} color="#1e40af" />

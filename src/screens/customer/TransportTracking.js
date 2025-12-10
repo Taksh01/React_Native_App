@@ -14,10 +14,12 @@ import { GTS } from "../../api/client";
 import { useAuth } from "../../store/auth";
 import AppIcon from "../../components/AppIcon";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 export default function TransportTracking() {
+  useScreenPermissionSync("TransportTracking");
   const { user } = useAuth();
-  const dbsId = user?.dbsId ?? "DBS-09";
+  const dbsId = user?.dbsId;
   const themeRef = useRef(null);
 
   const {

@@ -356,8 +356,8 @@ export default function TripDetailsModal({ visible, trip, onClose }) {
               <View style={styles.routeCard}>
                 <Text style={styles.routeText}>
                   {trip.route ||
-                    `${trip.msName || trip.origin || "MS"} → ${
-                      trip.dbsName || trip.destination || "DBS"
+                    `${trip.msName || trip.origin} → ${
+                      trip.dbsName || trip.destination
                     }`}
                 </Text>
               </View>

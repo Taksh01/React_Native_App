@@ -265,7 +265,7 @@ export async function apiRejectDriver(driverId, payload = {}) {
 // EIC - Get Clusters
 export async function apiGetClusters() {
   try {
-    const response = await fetch(`${CONFIG.API_BASE_URL}/api/eic/clusters`, {
+    const response = await fetch(`${CONFIG.API_BASE_URL}/api/eic/clusters/`, {
       method: "GET",
       headers: getAuthHeaders(),
     });
@@ -302,5 +302,25 @@ export async function apiUpdateCluster(clusterId, payload = {}) {
     return data;
   } catch (error) {
     handleApiError(error, "Failed to update cluster");
+  }
+}
+
+// EIC - Get Alerts
+export async function apiGetEicAlerts() {
+  try {
+    const response = await fetch(`${CONFIG.API_BASE_URL}/api/eic/alerts`, {
+      method: "GET",
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    handleApiError(error, "Failed to fetch alerts");
+    return { alerts: [] };
   }
 }

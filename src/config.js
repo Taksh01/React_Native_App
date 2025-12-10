@@ -19,5 +19,5 @@ const resolvedBaseUrl =
 
 export const CONFIG = {
   API_BASE_URL: resolvedBaseUrl,
-  WS_URL: `${resolvedBaseUrl.replace(/^http/i, "ws")}/ws`,
+  WS_URL: `${resolvedBaseUrl.replace(/^http/i, "ws")}/ws/driver/updates/`,
 };

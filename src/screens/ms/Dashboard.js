@@ -15,6 +15,7 @@ import { apiGetMsTripSchedule } from "../../lib/msApi";
 import AppIcon from "../../components/AppIcon";
 import TripDetailsModal from "../../components/TripDetailsModal";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 const STATUS_COLORS = {
   PENDING: "#64748b", // Slate 500
@@ -119,6 +120,7 @@ const resolveStatusColor = (status) => {
 };
 
 export default function MSDashboard() {
+  useScreenPermissionSync("MSDashboard");
   const { user } = useAuth();
   const msId = user?.msId || "MS-12";
   const [selectedTrip, setSelectedTrip] = useState(null);
@@ -343,7 +345,7 @@ export default function MSDashboard() {
           </View>
         </View>
         <Text style={styles.tripRoute}>
-          {item.route || `${data?.station?.msName || "MS"} → ${item.dbsName}`}
+          {item.route || `${data?.station?.msName} → ${item.dbsName}`}
         </Text>
         {/* <View style={styles.metaRow}>
           <View style={styles.metaItem}>

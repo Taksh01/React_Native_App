@@ -43,8 +43,10 @@ const Stack = createNativeStackNavigator();
 const CustomDrawerContent = memo(function CustomDrawerContent(props) {
   const { user, logout } = useAuth();
 
-  const handleLogout = useCallback(() => {
-    logout();
+  const handleLogout = useCallback(async () => {
+    console.log("[FdodoNavigator] handleLogout triggered");
+    await logout();
+    console.log("[FdodoNavigator] logout completed");
   }, [logout]);
 
   const userInitial = useMemo(() => user?.name?.charAt(0) || "F", [user?.name]);

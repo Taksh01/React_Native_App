@@ -142,7 +142,7 @@ const CustomerDrawerNavigator = memo(function CustomerDrawerNavigator() {
           ),
         }}
       />
-      <Drawer.Screen
+      {/* <Drawer.Screen
         name="CurrentStocks"
         component={CurrentStocks}
         options={{
@@ -151,8 +151,8 @@ const CustomerDrawerNavigator = memo(function CustomerDrawerNavigator() {
             <AppIcon icon="stocks" size={18} color={color} />
           ),
         }}
-      />
-      <Drawer.Screen
+      /> */}
+      {/* <Drawer.Screen
         name="TransportTracking"
         component={TransportTracking}
         options={{
@@ -161,7 +161,7 @@ const CustomerDrawerNavigator = memo(function CustomerDrawerNavigator() {
             <AppIcon icon="transport" size={18} color={color} />
           ),
         }}
-      />
+      /> */}
       <Drawer.Screen
         name="StockTransfers"
         component={StockTransfers}
@@ -172,7 +172,7 @@ const CustomerDrawerNavigator = memo(function CustomerDrawerNavigator() {
           ),
         }}
       />
-      <Drawer.Screen
+      {/* <Drawer.Screen
         name="TripAcceptance"
         component={TripAcceptance}
         options={{
@@ -181,7 +181,7 @@ const CustomerDrawerNavigator = memo(function CustomerDrawerNavigator() {
             <AppIcon icon="trips" size={18} color={color} />
           ),
         }}
-      />
+      /> */}
       <Drawer.Screen
         name="CustomerSettings"
         component={SettingsScreen}

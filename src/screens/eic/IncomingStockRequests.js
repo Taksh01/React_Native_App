@@ -27,9 +27,9 @@ import NotificationService from "../../services/NotificationService";
 import {
   getStockStatusColor,
   getStockStatusLabel,
-  normalizeStockStatus,
   STOCK_STATUS,
 } from "../../config/stockStatus";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 const FILTER_OPTIONS = {
   type: [
@@ -73,6 +73,7 @@ const getPriorityColor = (priority) => {
 };
 
 export default function IncomingStockRequests() {
+  useScreenPermissionSync("IncomingStockRequests");
   const [filters, setFilters] = useState({
     type: "ALL",
     status: "ALL",
@@ -90,7 +91,7 @@ export default function IncomingStockRequests() {
   const [rejectedDrivers, setRejectedDrivers] = useState({});
 
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, syncPermissions } = useAuth();
 
   const {
     data: requestsData,
@@ -160,8 +161,57 @@ export default function IncomingStockRequests() {
            queryClient.invalidateQueries(["incomingStockRequests"]);
            refetch();
         }, 3000);
+      } else if (
+        data.action === "REASSIGN_REQUIRED" ||
+        data.type === "ASSIGNMENT_EXPIRED"
+      ) {
+        const requestId = data.requestId;
+        const driverName = data.driverName || "Driver";
+        const driverId = data.driverId;
 
-      } else if (data.action === "ACCEPTED" || data.driverAction === "ACCEPTED") {
+        // Mark this driver as rejected/expired to prevent re-selecting immediately if desired
+        if (driverId) {
+          setRejectedDrivers((prev) => ({
+            ...prev,
+            [requestId]: {
+              ...(prev[requestId] || {}),
+              [driverId]: true,
+            },
+          }));
+        }
+
+        // Find the request
+        const requests =
+          requestsData?.results || requestsData?.data || requestsData || [];
+        const request = requests.find(
+          (r) => r.id === requestId || r.id === String(requestId)
+        );
+
+        if (request) {
+          Alert.alert(
+            "Assignment Expired",
+            `The assignment for driver ${driverName} has expired. Please select another driver.`,
+            [
+              {
+                text: "Reassign Driver",
+                onPress: () => {
+                  setSelectedRequest(request);
+                  setSelectedDriver(null);
+                  setShowDriverModal(true);
+                },
+              },
+            ],
+            { cancelable: false }
+          );
+        }
+
+        // Refresh list
+        queryClient.invalidateQueries(["incomingStockRequests"]);
+        refetch();
+      } else if (
+        data.action === "ACCEPTED" ||
+        data.driverAction === "ACCEPTED"
+      ) {
         Alert.alert(
           "Driver Accepted",
           "The driver has accepted the trip assignment!",
@@ -176,9 +226,70 @@ export default function IncomingStockRequests() {
       "driver_response",
       handleDriverResponse
     );
+    
+    // Listen for new stock request notifications
+    const handleStockRequest = (data) => {
+      console.log("[IncomingStockRequests] Received stock_request event:", data);
+      
+      // Refresh to show the new request
+      console.log("[IncomingStockRequests] Invalidating query");
+      queryClient.invalidateQueries(["incomingStockRequests"]);
+      refetch();
+      
+      const dbsName = data.dbsName || data.dbsId;
+      const msName = data.msName || data.msId;
+      
+      Alert.alert(
+        "New Stock Request",
+        `${dbsName} requested stock from ${msName}.`,
+        [
+          { 
+            text: "View", 
+            onPress: () => {
+              console.log("[IncomingStockRequests] User clicked View");
+              // Try to find the request in the current data
+              // We use queryClient to get the latest data from cache as refetch() might have updated it
+              const cachedData = queryClient.getQueryData(["incomingStockRequests"]);
+              const requests = cachedData?.results || cachedData?.data || cachedData || [];
+              const targetId = data.requestId || data.stockRequestId;
+              console.log("[IncomingStockRequests] Looking for targetId:", targetId);
+              
+              const request = requests.find(r => String(r.id) === String(targetId));
+              
+              if (request) {
+                console.log("[IncomingStockRequests] Request found immediately");
+                setSelectedRequest(request);
+                setShowDetailModal(true);
+              } else {
+                // If not found immediately, it might be because refetch is still in progress
+                console.log("[IncomingStockRequests] Request NOT found, setting pending");
+                setPendingViewRequestId(targetId);
+                Alert.alert("Request Loading", "The request is being loaded. Please update the list if it doesn't appear.");
+              }
+            } 
+          }
+        ],
+        { cancelable: false }
+      );
+    };
 
-    return () => unsubscribe();
-  }, [requestsData, refetch]);
+    const unsubscribeStock = NotificationService.addListener(
+      "stock_request",
+      handleStockRequest
+    );
+
+    // Check for any missed events (e.g. if we just navigated here from notification)
+    const lastEvent = NotificationService.getLastEvent("stock_request");
+    if (lastEvent) {
+       handleStockRequest(lastEvent);
+       NotificationService.clearLastEvent("stock_request");
+    }
+
+    return () => {
+      unsubscribe();
+      unsubscribeStock();
+    };
+  }, [requestsData, refetch, queryClient]);
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ requestId, status, notes, driverId }) =>
@@ -672,12 +783,12 @@ export default function IncomingStockRequests() {
         <Text style={styles.infoLabel}>DBS Station</Text>
         <Text style={styles.infoValue}>{item.dbsId}</Text>
       </View>
-      <View style={styles.infoRow}>
+      {/* <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>Quantity</Text>
         <Text style={styles.infoValue}>
           {parseFloat(item.quantity).toLocaleString()}
         </Text>
-      </View>
+      </View> */}
       <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>Priority</Text>
         <Text
@@ -778,12 +889,12 @@ export default function IncomingStockRequests() {
                 {selectedRequest?.priority}
               </Text>
             </View>
-            <View style={styles.detailRow}>
+            {/* <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Quantity</Text>
               <Text style={styles.detailValue}>
                 {parseFloat(selectedRequest?.quantity || 0).toLocaleString()}
               </Text>
-            </View>
+            </View> */}
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Requested At</Text>
               <Text style={styles.detailValue}>

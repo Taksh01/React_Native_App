@@ -12,13 +12,15 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { GTS } from "../../api/client";
+import * as sglCustomerApi from "../../lib/sglCustomerApi";
 import { useAuth } from "../../store/auth";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 export default function TripAcceptance() {
+  useScreenPermissionSync("TripAcceptance");
   const { user } = useAuth();
-  const dbsId = user?.dbsId ?? "DBS-09";
+  const dbsId = user?.dbsId;
   const customerUserId = user?.id ?? "6";
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -34,7 +36,7 @@ export default function TripAcceptance() {
     error,
   } = useQuery({
     queryKey: ["pendingTrips", dbsId],
-    queryFn: () => GTS.getPendingTrips(dbsId),
+    queryFn: () => sglCustomerApi.getPendingTrips(),
     refetchInterval: 30000,
     refetchIntervalInBackground: false,
     notifyOnChangeProps: ["data", "error"],
@@ -42,12 +44,12 @@ export default function TripAcceptance() {
 
   const { data: permissionData, isLoading: isPermissionsLoading } = useQuery({
     queryKey: ["customerPermissions", customerUserId],
-    queryFn: () => GTS.getCustomerPermissions(customerUserId),
+    queryFn: () => sglCustomerApi.getCustomerPermissions(),
     staleTime: 5 * 60 * 1000,
   });
 
   const acceptTripMutation = useMutation({
-    mutationFn: (tripId) => GTS.acceptTrip(tripId, user?.id),
+    mutationFn: (tripId) => sglCustomerApi.acceptTrip(tripId),
     onMutate: async (tripId) => {
       await queryClient.cancelQueries(["pendingTrips", dbsId]);
       const previousTrips = queryClient.getQueryData(["pendingTrips", dbsId]);

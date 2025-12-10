@@ -13,6 +13,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { GTS } from "../../api/client";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 const createInitialForm = () => ({
   customerId: "",
@@ -35,6 +36,7 @@ function normalizeTokens(payload) {
 }
 
 export default function ManualTokenAssignment() {
+  useScreenPermissionSync("ManualTokenAssignment");
   const [form, setForm] = useState(createInitialForm);
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(false);

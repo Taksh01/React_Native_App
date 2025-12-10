@@ -1,10 +1,12 @@
 import React from "react";
 import { useAuth } from "../../store/auth";
 import MsClusterTransfers from "../shared/MsClusterTransfers";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 import { apiGetStockTransfers, apiGetMsCluster } from "../../lib/eicApi";
 
 export default function EicStockTransfers() {
+  useScreenPermissionSync("EicStockTransfers");
   const { user } = useAuth();
   const msId = user?.msId || null;
 

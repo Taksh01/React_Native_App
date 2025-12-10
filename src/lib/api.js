@@ -150,12 +150,38 @@ export async function apiLogin(credentials) {
       throw new ApiError("Invalid login response format", 422);
     }
 
+    console.log("LOGIN RESPONSE:", JSON.stringify(response, null, 2));
+
     return response;
+ 
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
     }
     throw new ApiError("Login failed. Please try again", 0, error);
+  }
+}
+
+export async function apiGetPermissions() {
+  try {
+    const response = await makeApiCall(
+      `${CONFIG.API_BASE_URL}/api/auth/permissions/`,
+      {
+        method: "GET",
+      }
+    );
+    // Expecting response: { permissions: { ... } }
+    if (response.permissions) {
+      console.log("PERMISSIONS FETCHED:", JSON.stringify(response.permissions, null, 2));
+      return response.permissions;
+    }
+    return response;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    console.warn("Permission fetch failed silently:", error);
+    return {}; // Return empty permissions on failure rather than crashing
   }
 }
 

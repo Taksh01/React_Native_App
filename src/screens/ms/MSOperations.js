@@ -11,20 +11,23 @@ import {
   ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "../../store/auth";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation } from "@tanstack/react-query";
-import { useRoute, useFocusEffect } from "@react-navigation/native";
+import { useRoute, useFocusEffect, useNavigation } from "@react-navigation/native";
 import {
   apiSignalArrival,
   apiStartDecant,
   apiEndDecant,
   apiOperatorAcknowledge,
+  apiGetPendingArrivals,
 } from "../../lib/msApi";
 import NotificationService from "../../services/NotificationService";
 import AppIcon from "../../components/AppIcon";
 import AppButton from "../../components/AppButton";
 import AppTextField from "../../components/AppTextField";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 // Step legend:
 // 0 = Simulate Arrival (Wait for Notif)
@@ -35,8 +38,11 @@ import { useThemedStyles } from "../../theme";
 const STORAGE_KEY = "@ms_operations_state";
 
 export default function MSOperations() {
+  useScreenPermissionSync("MSOperations");
   const route = useRoute();
+  const navigation = useNavigation();
   const [step, setStep] = useState(0);
+  const { token: authToken } = useAuth();
   const [qty, setQty] = useState("");
   const [truckNumber, setTruckNumber] = useState("");
   const [preReadings, setPreReadings] = useState({
@@ -81,6 +87,41 @@ export default function MSOperations() {
     return () => off && off();
   }, []);
 
+  // Poll for pending arrivals on mount (recover flow if notification cleared)
+  useEffect(() => {
+    const checkPending = async () => {
+      // Only check if we are in initial state
+      if (step > 0 || tripId) return;
+
+      const data = await apiGetPendingArrivals();
+      if (data?.arrivals?.length > 0) {
+        const arrival = data.arrivals[0];
+        console.log("[MSOperations] Found pending arrival:", arrival);
+        
+        // Map API response to internal state format
+        setNotifAssignment({
+          tripId: arrival.tripId,
+          driverId: arrival.driverId,
+          truckNumber: arrival.truckNumber,
+          tripToken: arrival.tripToken,
+        });
+
+        // Also set gate immediately like notification would
+        if (arrival.tripId) {
+           setArrivalGate({ 
+             allowed: true, 
+             forTrip: arrival.tripId 
+           });
+           setTripId(arrival.tripId);
+           if (arrival.tripToken) {
+              setTripToken(arrival.tripToken);
+           }
+        }
+      }
+    };
+    checkPending();
+  }, []);
+
   // Persistence: Load State
   useEffect(() => {
     const loadState = async () => {
@@ -88,6 +129,7 @@ export default function MSOperations() {
         const saved = await AsyncStorage.getItem(STORAGE_KEY);
         if (saved) {
           const state = JSON.parse(saved);
+          console.log("[MSOperations] Loaded state:", state); 
           // Only restore if we are not already deep-linked (route params take precedence)
           if (!route?.params?.tripId) {
             if (state.step !== undefined) setStep(state.step);
@@ -114,6 +156,9 @@ export default function MSOperations() {
     if (!isStateLoaded) return;
 
     const saveState = async () => {
+      // Prevent saving if user is logged out (token is null)
+      if (!authToken) return;
+
       // Only save if we have an active session (gate allowed or step > 0)
       if (arrivalGate.allowed || step > 0) {
         const state = {
@@ -144,6 +189,7 @@ export default function MSOperations() {
     truckNumber,
     preReadings,
     postReadings,
+    authToken,
   ]);
 
   // Compute effective assigned ids
@@ -178,13 +224,17 @@ export default function MSOperations() {
   useEffect(() => {
     const notifTripId =
       route?.params?.type === "ms_arrival" ? route?.params?.tripId : null;
+    console.log("[MSOperations] Route Params Changed:", route.params); 
     if (notifTripId) {
       setArrivalGate({ allowed: true, forTrip: notifTripId });
-      if (!tripId) setTripId(notifTripId);
-      Alert.alert(
-        "Truck arrived",
-        `Truck for trip ${notifTripId} reached your MS.`
-      );
+      // Only set ID and alert if we aren't already working on this trip
+      if (tripId !== notifTripId) {
+        setTripId(notifTripId);
+        Alert.alert(
+          "Truck arrived",
+          `Truck for trip ${notifTripId} reached your MS.`
+        );
+      }
     }
     if (!notifTripId) {
       const last = NotificationService.getLastEvent("ms_arrival");
@@ -205,7 +255,7 @@ export default function MSOperations() {
         }
       }
     }
-  }, [route?.params?.type, route?.params?.tripId, tripId]);
+  }, [route?.params?.type, route?.params?.tripId]);
 
   // On focus
   useFocusEffect(
@@ -220,8 +270,8 @@ export default function MSOperations() {
           setNotifAssignment({
             tripId: notifTripId,
             driverId: route.params.driverId,
-            truckNumber: route.params.truckNumber,
-            tripToken: route.params.tripToken,
+            truckNumber: route.params.truckNumber || route.params.vehicleNo,
+            tripToken: route.params.tripToken || route.params.token,
           });
         }
       } catch (_error) {}
@@ -291,41 +341,56 @@ export default function MSOperations() {
     mutationFn: () => apiOperatorAcknowledge(tripToken, qty),
     onSuccess: () => {
       setOpAck(true);
+      // 1. Clear everything immediately
+      setQty("");
+      setOpAck(false);
+      setStep(0);
+      setTruckNumber("");
+      setTripId(null);
+      setTripToken(null);
+      setArrivalGate({ allowed: false, forTrip: null });
+      setNotifAssignment({
+        tripId: null,
+        driverId: null,
+        truckNumber: null,
+        tripToken: null,
+      });
+              
+      // Clear route params to prevent state revival
+      navigation.setParams({
+         tripId: undefined,
+         driverId: undefined,
+         token: undefined,
+         type: undefined,
+         vehicleNo: undefined,
+         truckNumber: undefined,
+         tripToken: undefined
+      });
+              
+      // Clear persistent notification event so it doesn't revive state
+      NotificationService.clearLastEvent("ms_arrival");
+
+      setPreReadings({ pressure: "", mfm: "" });
+      setPostReadings({ pressure: "", mfm: "" });
+      
+      // Reset mutations
+      signalArrival.reset();
+      confirmPreReadings.reset();
+      confirmPostReadings.reset();
+      acknowledgeOperator.reset();
+      
+      // Clear storage immediately
+      AsyncStorage.removeItem(STORAGE_KEY).catch((e) =>
+        console.warn("Failed to clear state", e)
+      );
+
       Keyboard.dismiss();
+
+      // 2. Show Alert (Just for display)
       Alert.alert(
         "Operation Completed",
         "Filling confirmed successfully.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              // Reset flow
-              setQty("");
-              setOpAck(false);
-              setStep(0);
-              setTruckNumber("");
-              setTripId(null);
-              setTripToken(null);
-              setArrivalGate({ allowed: false, forTrip: null });
-              setNotifAssignment({
-                tripId: null,
-                driverId: null,
-                truckNumber: null,
-                tripToken: null,
-              });
-              setPreReadings({ pressure: "", mfm: "" });
-              setPostReadings({ pressure: "", mfm: "" });
-              signalArrival.reset();
-              confirmPreReadings.reset();
-              confirmPostReadings.reset();
-              acknowledgeOperator.reset();
-              
-              AsyncStorage.removeItem(STORAGE_KEY).catch((e) =>
-                console.warn("Failed to clear state", e)
-              );
-            }
-          }
-        ]
+        [{ text: "OK" }]
       );
     },
   });
@@ -585,39 +650,41 @@ export default function MSOperations() {
             )}
 
             {/* Dev Helper */}
-            <View style={styles.devSection}>
-              <Text style={styles.devTitle}>Development Mode</Text>
-              <Text style={styles.devText}>
-                Simulate arrival or reset state if stuck.
-              </Text>
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                <AppButton
-                  title="Simulate Arrival"
-                  onPress={simulateDevArrival}
-                  variant="outline"
-                  style={{ flex: 1 }}
-                />
-                <AppButton
-                  title="Reset State"
-                  onPress={() => {
-                    AsyncStorage.removeItem(STORAGE_KEY);
-                    setStep(0);
-                    setTripId(null);
-                    setTripToken(null);
-                    setArrivalGate({ allowed: false, forTrip: null });
-                    setNotifAssignment({
-                      tripId: null,
-                      driverId: null,
-                      truckNumber: null,
-                      tripToken: null,
-                    });
-                    Alert.alert("Reset", "State cleared.");
-                  }}
-                  variant="danger"
-                  style={{ flex: 1 }}
-                />
+            {NotificationService.areNotificationsLimited() && (
+              <View style={styles.devSection}>
+                <Text style={styles.devTitle}>Development Mode</Text>
+                <Text style={styles.devText}>
+                  Simulate arrival or reset state if stuck.
+                </Text>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <AppButton
+                    title="Simulate Arrival"
+                    onPress={simulateDevArrival}
+                    variant="outline"
+                    style={{ flex: 1 }}
+                  />
+                  <AppButton
+                    title="Reset State"
+                    onPress={() => {
+                      AsyncStorage.removeItem(STORAGE_KEY);
+                      setStep(0);
+                      setTripId(null);
+                      setTripToken(null);
+                      setArrivalGate({ allowed: false, forTrip: null });
+                      setNotifAssignment({
+                        tripId: null,
+                        driverId: null,
+                        truckNumber: null,
+                        tripToken: null,
+                      });
+                      Alert.alert("Reset", "State cleared.");
+                    }}
+                    variant="danger"
+                    style={{ flex: 1 }}
+                  />
+                </View>
               </View>
-            </View>
+            )}
           </View>
 
           {/* Step 2: Pre-Fill Readings */}

@@ -11,9 +11,10 @@ import {
   ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "../../store/auth";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useRoute, useFocusEffect } from "@react-navigation/native";
+import { useRoute, useFocusEffect, useNavigation } from "@react-navigation/native";
 import {
   apiSignalArrival,
   apiGetPre,
@@ -23,6 +24,7 @@ import {
   apiConfirmDelivery,
   apiOperatorAcknowledge,
   getDriverToken,
+  apiGetPendingArrivals,
 } from "../../lib/dbsApi";
 import { CONFIG } from "../../config";
 import NotificationService from "../../services/NotificationService";
@@ -30,6 +32,7 @@ import AppIcon from "../../components/AppIcon";
 import AppButton from "../../components/AppButton";
 import AppTextField from "../../components/AppTextField";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 // demo tripId — replace with selection later
 
@@ -43,8 +46,11 @@ import { useThemedStyles } from "../../theme";
 const STORAGE_KEY = "@dbs_decanting_state";
 
 export default function Decanting() {
+  useScreenPermissionSync("Decanting");
   const route = useRoute();
+  const navigation = useNavigation();
   const [step, setStep] = useState(0);
+  const { token: authToken } = useAuth();
   const [qty, setQty] = useState("");
   const [truckNumber, setTruckNumber] = useState("");
   const [preReadings, setPreReadings] = useState({
@@ -87,10 +93,45 @@ export default function Decanting() {
         tripId: data.tripId,
         driverId: data.driverId,
         truckNumber: data.truckNumber,
-        tripToken: data.tripToken,
+        tripToken: data.tripToken || data.token || data.trip_token,
       });
     });
     return () => off && off();
+  }, []);
+
+  // Poll for pending arrivals on mount (recover flow if notification cleared)
+  useEffect(() => {
+    const checkPending = async () => {
+      // Only check if we are in initial state
+      if (step > 0 || tripId) return;
+
+      const data = await apiGetPendingArrivals();
+      if (data?.arrivals?.length > 0) {
+        const arrival = data.arrivals[0];
+        console.log("[Decanting] Found pending arrival:", arrival);
+        
+        // Map API response to internal state format
+        setNotifAssignment({
+          tripId: arrival.tripId || arrival.trip_id,
+          driverId: arrival.driverId || arrival.driver_id,
+          truckNumber: arrival.truckNumber || arrival.truck_number,
+          tripToken: arrival.tripToken || arrival.trip_token,
+        });
+        
+        // Also set gate immediately like notification would
+        if (arrival.tripId || arrival.trip_id) {
+           setArrivalGate({ 
+             allowed: true, 
+             forTrip: arrival.tripId || arrival.trip_id 
+           });
+           setTripId(arrival.tripId || arrival.trip_id);
+           if (arrival.tripToken || arrival.trip_token) {
+              setTripToken(arrival.tripToken || arrival.trip_token);
+           }
+        }
+      }
+    };
+    checkPending();
   }, []);
 
   // Persistence: Load State
@@ -100,6 +141,7 @@ export default function Decanting() {
         const saved = await AsyncStorage.getItem(STORAGE_KEY);
         if (saved) {
           const state = JSON.parse(saved);
+          console.log("[Decanting] Loaded state:", state);
           // Only restore if we are not already deep-linked (route params take precedence)
           if (!route?.params?.tripId) {
             if (state.step !== undefined) setStep(state.step);
@@ -127,6 +169,9 @@ export default function Decanting() {
     if (!isStateLoaded) return;
 
     const saveState = async () => {
+      // Prevent saving if user is logged out (token is null)
+      if (!authToken) return;
+
       // Only save if we have an active session (gate allowed or step > 0)
       if (arrivalGate.allowed || step > 0) {
         const state = {
@@ -157,6 +202,7 @@ export default function Decanting() {
     truckNumber,
     preReadings,
     postReadings,
+    authToken,
   ]);
 
   // Compute effective assigned ids (from route params, notification, or dev fallback)
@@ -186,7 +232,20 @@ export default function Decanting() {
          return;
       }
 
-      // If we have a token from notification, use it directly
+      // 1. Check Route Params (prioritize notification payload)
+      if (route?.params?.token) {
+        if (cancelled) return;
+        setTripToken(route.params.token);
+        setTripId(effectiveAssignedTripId);
+        setArrivalGate({
+          allowed: true,
+          forTrip: effectiveAssignedTripId,
+        });
+        setTokenLoading(false);
+        return;
+      }
+
+      // 2. If we have a token from event listener, use it directly
       if (notifAssignment.tripToken) {
         if (cancelled) return;
         setTripToken(notifAssignment.tripToken);
@@ -240,17 +299,19 @@ export default function Decanting() {
   // When opened from notification with type=dbs_arrival, gate arrival for that trip only
   useEffect(() => {
     const notifTripId =
-      route?.params?.type === "dbs_arrival" ? route?.params?.tripId : null;
+            route?.params?.type === "dbs_arrival" ? route?.params?.tripId : null;
+    console.log("[Decanting] Route params changed:", route.params);
     // check route params for dbs_arrival
     if (notifTripId) {
       setArrivalGate({ allowed: true, forTrip: notifTripId });
-      // Prefer using notif tripId until backend token resolves
-      if (!tripId) setTripId(notifTripId);
-      // set arrival gate from params
-      Alert.alert(
-        "Truck arrived",
-        `Truck for trip ${notifTripId} reached your DBS.`
-      );
+      // Only set ID and alert if we aren't already working on this trip
+      if (tripId !== notifTripId) {
+        setTripId(notifTripId);
+        Alert.alert(
+          "Truck arrived",
+          `Truck for trip ${notifTripId} reached your DBS.`
+        );
+      }
     }
     // If no route params, use last event if present (covers late mount)
     if (!notifTripId) {
@@ -272,7 +333,7 @@ export default function Decanting() {
         }
       }
     }
-  }, [route?.params?.type, route?.params?.tripId, tripId]);
+  }, [route?.params?.type, route?.params?.tripId]);
 
   // On focus, if we came here manually and there was a queued intent, emit locally
   useFocusEffect(
@@ -290,8 +351,8 @@ export default function Decanting() {
           setNotifAssignment({
             tripId: notifTripId,
             driverId: route.params.driverId,
-            truckNumber: route.params.truckNumber,
-            tripToken: route.params.tripToken,
+            truckNumber: route.params.truckNumber || route.params.vehicleNo,
+            tripToken: route.params.tripToken || route.params.token,
           });
         }
       } catch (_error) {}
@@ -372,46 +433,59 @@ export default function Decanting() {
   const acknowledgeOperator = useMutation({
     mutationFn: () => apiOperatorAcknowledge(tripToken, qty),
     onSuccess: () => {
-      setOpAck(true);
+      // 1. Clear everything immediately
+      setQty("");
+      setOpAck(false);
+      setDrvAck(true);
+
+      setStep(0);
+      setTruckNumber("");
+      setTripId(null);
+      setTripToken(null);
+      setArrivalGate({ allowed: false, forTrip: null });
+      setNotifAssignment({
+        tripId: null,
+        driverId: null,
+        truckNumber: null,
+        tripToken: null,
+      });
+              
+      // Clear route params to prevent state revival
+      navigation.setParams({
+         tripId: undefined,
+         driverId: undefined,
+         token: undefined,
+         type: undefined,
+         vehicleNo: undefined,
+         truckNumber: undefined,
+         tripToken: undefined
+      });
+
+      // Clear persistent notification event so it doesn't revive state
+      NotificationService.clearLastEvent("dbs_arrival");
+              
+      setPreReadings({ pressure: "", mfm: "" });
+      setPostReadings({ pressure: "", mfm: "" });
+      
+      // Reset mutations
+      signalArrival.reset();
+      confirmTruck.reset();
+      confirmPreReadings.reset();
+      confirmPostReadings.reset();
+      acknowledgeOperator.reset();
+      
+      // Clear persistence immediately
+      AsyncStorage.removeItem(STORAGE_KEY).catch((e) =>
+        console.warn("Failed to clear state", e)
+      );
+
       Keyboard.dismiss();
+
+      // 2. Show Alert (Just for display)
       Alert.alert(
         "Operator Acknowledged",
         "Decanting confirmed successfully. Process completed.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              // Reset flow to start
-              setQty("");
-              setOpAck(false);
-              setDrvAck(true);
-
-              setStep(0);
-              setTruckNumber("");
-              setTripId(null);
-              setTripToken(null);
-              setArrivalGate({ allowed: false, forTrip: null });
-              setNotifAssignment({
-                tripId: null,
-                driverId: null,
-                truckNumber: null,
-                tripToken: null,
-              });
-              setPreReadings({ pressure: "", mfm: "" });
-              setPostReadings({ pressure: "", mfm: "" });
-              signalArrival.reset();
-              confirmTruck.reset();
-              confirmPreReadings.reset();
-              confirmPostReadings.reset();
-              acknowledgeOperator.reset();
-              
-              // Clear persistence
-              AsyncStorage.removeItem(STORAGE_KEY).catch((e) =>
-                console.warn("Failed to clear state", e)
-              );
-            }
-          }
-        ]
+        [{ text: "OK" }]
       );
     },
   });
@@ -769,39 +843,41 @@ export default function Decanting() {
             )}
 
             {/* Dev Helper - Always Visible for now to help user unblock */}
-            <View style={styles.devSection}>
-              <Text style={styles.devTitle}>Development Mode</Text>
-              <Text style={styles.devText}>
-                Simulate arrival or reset state if stuck.
-              </Text>
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                <AppButton
-                  title="Simulate Arrival"
-                  onPress={simulateDevArrival}
-                  variant="outline"
-                  style={{ flex: 1 }}
-                />
-                <AppButton
-                  title="Reset State"
-                  onPress={() => {
-                    AsyncStorage.removeItem(STORAGE_KEY);
-                    setStep(0);
-                    setTripId(null);
-                    setTripToken(null);
-                    setArrivalGate({ allowed: false, forTrip: null });
-                    setNotifAssignment({
-                      tripId: null,
-                      driverId: null,
-                      truckNumber: null,
-                      tripToken: null,
-                    });
-                    Alert.alert("Reset", "State cleared.");
-                  }}
-                  variant="danger"
-                  style={{ flex: 1 }}
-                />
+            {NotificationService.areNotificationsLimited() && (
+              <View style={styles.devSection}>
+                <Text style={styles.devTitle}>Development Mode</Text>
+                <Text style={styles.devText}>
+                  Simulate arrival or reset state if stuck.
+                </Text>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <AppButton
+                    title="Simulate Arrival"
+                    onPress={simulateDevArrival}
+                    variant="outline"
+                    style={{ flex: 1 }}
+                  />
+                  <AppButton
+                    title="Reset State"
+                    onPress={() => {
+                      AsyncStorage.removeItem(STORAGE_KEY);
+                      setStep(0);
+                      setTripId(null);
+                      setTripToken(null);
+                      setArrivalGate({ allowed: false, forTrip: null });
+                      setNotifAssignment({
+                        tripId: null,
+                        driverId: null,
+                        truckNumber: null,
+                        tripToken: null,
+                      });
+                      Alert.alert("Reset", "State cleared.");
+                    }}
+                    variant="danger"
+                    style={{ flex: 1 }}
+                  />
+                </View>
               </View>
-            </View>
+            )}
             {signalArrival.error && (
               <Text style={styles.errorMessage}>
                 Arrival error: {signalArrival.error.message}

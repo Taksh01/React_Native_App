@@ -44,20 +44,25 @@ const handleApiError = (error, fallbackMessage) => {
 // MS - Token-based operations (Mirroring DBS structure)
 export async function apiSignalArrival(tripToken) {
   try {
-    const response = await fetch(
-      `${CONFIG.API_BASE_URL}/api/ms/arrival/confirm`,
-      {
+    const url = `${CONFIG.API_BASE_URL}/api/ms/arrival/confirm`;
+    console.log("[msApi] apiSignalArrival URL:", url, "Token:", tripToken);
+    
+    const response = await fetch(url, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ tripToken }),
-      }
-    );
+    });
+    
+    const text = await response.text();
+    console.log("[msApi] response:", response.status, text);
+    
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    return data;
+    try {
+        return JSON.parse(text);
+    } catch(e) { return text; }
   } catch (error) {
     handleApiError(error, "Failed to signal arrival");
   }
@@ -85,21 +90,24 @@ export async function apiGetPre(tripToken) {
 
 export async function apiStartDecant(tripToken, readings) {
   try {
-    const response = await fetch(
-      `${CONFIG.API_BASE_URL}/api/ms/fill/start`,
-      {
+    const url = `${CONFIG.API_BASE_URL}/api/ms/fill/start`;
+    const payload = { tripToken, ...readings };
+    console.log("[msApi] apiStartDecant URL:", url, JSON.stringify(payload));
+
+    const response = await fetch(url, {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ tripToken, ...readings }),
-      }
-    );
+        body: JSON.stringify(payload),
+    });
+
+    const text = await response.text();
+    console.log("[msApi] response:", response.status, text);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    return data;
+    return JSON.parse(text);
   } catch (error) {
     handleApiError(error, "Failed to start fill");
   }
@@ -107,21 +115,24 @@ export async function apiStartDecant(tripToken, readings) {
 
 export async function apiEndDecant(tripToken, readings) {
   try {
-    const response = await fetch(
-      `${CONFIG.API_BASE_URL}/api/ms/fill/end`,
-      {
+    const url = `${CONFIG.API_BASE_URL}/api/ms/fill/end`;
+    const payload = { tripToken, ...readings };
+    console.log("[msApi] apiEndDecant URL:", url, JSON.stringify(payload));
+
+    const response = await fetch(url, {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ tripToken, ...readings }),
-      }
-    );
+        body: JSON.stringify(payload),
+    });
+
+    const text = await response.text();
+    console.log("[msApi] response:", response.status, text);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    return data;
+    return JSON.parse(text);
   } catch (error) {
     handleApiError(error, "Failed to end fill");
   }
@@ -195,6 +206,30 @@ export async function apiGetMsCluster(msId) {
     return data;
   } catch (error) {
     return { cluster: {} };
+  }
+}
+
+// MS - Get Pending Arrivals
+export async function apiGetPendingArrivals() {
+  try {
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/api/ms/pending-arrivals`,
+      {
+        method: "GET",
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      // gracefully fail if endpoint doesn't exist yet
+      if (response.status === 404) return { arrivals: [] };
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.warn("Pending arrivals check failed:", error);
+    return { arrivals: [] };
   }
 }
 

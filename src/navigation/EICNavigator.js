@@ -13,6 +13,7 @@ import AppIcon from "../components/AppIcon";
 
 // EIC Screens
 import IncomingStockRequests from "../screens/eic/IncomingStockRequests";
+import AlertsList from "../screens/eic/AlertsList";
 import VehicleTracking from "../screens/eic/VehicleTracking";
 import VehicleQueue from "../screens/eic/VehicleQueue";
 import ManualTokenAssignment from "../screens/eic/ManualTokenAssignment";
@@ -165,6 +166,16 @@ const DrawerNavigator = memo(function DrawerNavigator() {
         }}
       />
       <Drawer.Screen
+        name="Alerts"
+        component={AlertsList}
+        options={{
+          title: "Alerts",
+          drawerIcon: ({ color }) => (
+            <AppIcon icon="notifications" size={18} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
         name="StockRequests"
         component={IncomingStockRequests}
         options={{
@@ -279,6 +290,11 @@ function StackNavigator() {
         name="NetworkDashboard"
         component={NetworkDashboard}
         options={{ title: "Network Dashboard" }}
+      />
+      <Stack.Screen
+        name="Alerts"
+        component={AlertsList}
+        options={{ title: "Alerts" }}
       />
       <Stack.Screen
         name="StockRequests"

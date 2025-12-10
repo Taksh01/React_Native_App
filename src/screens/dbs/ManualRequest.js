@@ -19,10 +19,12 @@ import AppButton from "../../components/AppButton";
 import AppIcon from "../../components/AppIcon";
 import { useThemedStyles } from "../../theme";
 import { apiSubmitManualRequest } from "../../lib/dbsApi";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 export default function ManualRequest() {
-  const [qty, setQty] = useState("");
-  const qtyRef = useRef(null);
+  useScreenPermissionSync("ManualRequest");
+  // const [qty, setQty] = useState("");
+  // const qtyRef = useRef(null);
   const [requiredBy, setRequiredBy] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // const [showDatePicker, setShowDatePicker] = useState(false);
@@ -253,18 +255,18 @@ export default function ManualRequest() {
   );
 
   const submit = async () => {
-    const trimmed = qty.trim();
-    const num = parseFloat(trimmed);
+    // const trimmed = qty.trim();
+    // const num = parseFloat(trimmed);
 
-    if (!trimmed || isNaN(num) || num <= 0) {
-      Alert.alert(
-        "Enter quantity",
-        "Please enter a valid number for Requested Qty."
-      );
-      // Keep keyboard and focus so user can fix it
-      qtyRef.current?.focus();
-      return;
-    }
+    // if (!trimmed || isNaN(num) || num <= 0) {
+    //   Alert.alert(
+    //     "Enter quantity",
+    //     "Please enter a valid number for Requested Qty."
+    //   );
+    //   // Keep keyboard and focus so user can fix it
+    //   qtyRef.current?.focus();
+    //   return;
+    // }
     if (!requiredBy) {
       Alert.alert(
         "Select required by",
@@ -280,7 +282,7 @@ export default function ManualRequest() {
     try {
       // Format the payload as requested
       const payload = {
-        requested_qty_kg: num,
+        // requested_qty_kg: num,
         requested_by_date: requiredBy.toISOString().split("T")[0], // "2024-12-04"
         requested_by_time: requiredBy.toTimeString().split(" ")[0], // "14:30:00"
       };
@@ -289,14 +291,14 @@ export default function ManualRequest() {
 
       Alert.alert(
         "Request Submitted",
-        `Successfully submitted request for ${num} kg\nRequired by: ${formatDate(
+        `Successfully submitted request\nRequired by: ${formatDate(
           requiredBy
         )} ${formatTime(requiredBy)}`,
         [
           {
             text: "OK",
             onPress: () => {
-              setQty("");
+              // setQty("");
               setRequiredBy(null);
             },
           },
@@ -333,19 +335,7 @@ export default function ManualRequest() {
 
           <View style={styles.card}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Requested Quantity</Text>
-              {/* <AppTextField
-                ref={qtyRef}
-                placeholder="Enter quantity (e.g. 1000.5)"
-                value={qty}
-                onChangeText={setQty}
-                keyboardType="decimal-pad"
-                autoCorrect={false}
-                autoCapitalize="none"
-                returnKeyType="done"
-                onSubmitEditing={submit}
-              /> */}
-
+              {/* <Text style={styles.inputLabel}>Requested Quantity</Text>
               <AppTextField
                 ref={qtyRef}
                 placeholder="Enter quantity (e.g. 1000.5)"
@@ -361,7 +351,7 @@ export default function ManualRequest() {
 
               <Text style={styles.inputHint}>
                 Enter the quantity in litres that you need to request
-              </Text>
+              </Text> */}
             </View>
 
             {/* Required by (Date & Time) */}
@@ -450,7 +440,7 @@ export default function ManualRequest() {
             <AppButton
               title={isSubmitting ? "Submitting..." : "Submit Request"}
               onPress={submit}
-              disabled={!qty.trim() || !requiredBy || isSubmitting}
+              disabled={!requiredBy || isSubmitting}
             />
           </View>
         </View>

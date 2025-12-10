@@ -521,17 +521,11 @@ export default function StockTransfersView({
     });
   };
 
-  const getProductLabel = (item) => {
-    const raw = (item?.productName || item?.product || "").toString();
-    if (raw.toUpperCase().includes("CNG")) {
-      return raw;
-    }
-    return "CNG";
-  };
+
 
   const getRouteLabels = (item) => {
-    const fallbackFrom = item.fromLocation || "MS";
-    const fallbackTo = item.toLocation || "DBS";
+    const fallbackFrom = item.fromLocation;
+    const fallbackTo = item.toLocation;
     if (normalizedDirection === "OUTGOING" && originLabelOverride) {
       return {
         from: originLabelOverride,
@@ -552,12 +546,12 @@ export default function StockTransfersView({
           <View style={styles.transferInfo}>
             <View style={styles.transferTypeRow}>
               {/* <Text style={styles.transferType}>
-                {normalizedDirection || item.type || "TRANSFER"}
+                {normalizedDirection || item.type}
               </Text> */}
-              {/* <Text style={styles.transferId}>#{item.id}</Text> */}
+              {item.id ? <Text style={styles.transferRoute}>Stock Trasnsfer Id: {item.id}</Text> : null}
             </View>
             <Text style={styles.transferRoute}>
-              {from} → {to}
+              {from} to {to}
             </Text>
             {/* <Text style={styles.transferMeta}>
             Priority: {(item.priority || "standard").toUpperCase()}
@@ -581,7 +575,7 @@ export default function StockTransfersView({
         </View>
 
         <View style={styles.productInfo}>
-          <Text style={styles.productName}>{getProductLabel(item)}</Text>
+          <Text style={styles.productName}>Qty</Text>
           <Text style={styles.quantity}>
             {item.quantity?.toLocaleString?.() || item.quantity || 0}
           </Text>
@@ -589,17 +583,18 @@ export default function StockTransfersView({
 
         <View style={styles.timeInfo}>
           <View style={styles.timeRow}>
-            <Text style={styles.timeLabel}>Completed:</Text>
-            <Text style={styles.timeValue}>{formatDate(item.initiatedAt)}</Text>
+            <Text style={styles.timeLabel}>Initiated:</Text>
+            <Text style={styles.timeValue}>
+              {item.initiatedAt ? formatDate(item.initiatedAt) : "Not Initiated"}
+            </Text>
           </View>
-          {/* {item.completedAt ? (
-            <View style={styles.timeRow}>
-              <Text style={styles.timeLabel}>Completed:</Text>
-              <Text style={styles.timeValue}>
-                {formatDate(item.completedAt)}
-              </Text>
-            </View>
-          ) : null} */}
+          <View style={styles.timeRow}>
+            <Text style={styles.timeLabel}>Completed:</Text>
+            <Text style={styles.timeValue}>
+              {item.completedAt ? formatDate(item.completedAt) : "Not Completed"}
+            </Text>
+          </View>
+          {/* {item.estimatedCompletion && !item.completedAt ? (
           {/* {item.estimatedCompletion && !item.completedAt ? (
             <View style={styles.timeRow}>
               <Text style={styles.timeLabel}>Expected:</Text>

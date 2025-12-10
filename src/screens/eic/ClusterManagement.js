@@ -24,12 +24,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGetClusters, apiUpdateCluster } from "../../lib/eicApi";
 import { useAuth } from "../../store/auth";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 const createClusterForm = (cluster) => {
-  const dbsStations = cluster?.dbsStations || [];
+  const dbsStations = cluster?.dbsStations || cluster?.assignedDBS || [];
   const mapped = dbsStations.map((station) => ({
-    id: station.id || "",
-    name: station.name || "",
+    id: station.id || station.dbsCode || "",
+    name: station.name || station.dbsName || "",
     capacity: station.capacity != null ? String(station.capacity) : "",
   }));
   if (mapped.length === 0) {
@@ -50,6 +51,7 @@ const parseDbsStations = (fields) =>
     }));
 
 export default function ClusterManagement() {
+  useScreenPermissionSync("ClusterManagement");
   const [selectedCluster, setSelectedCluster] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [clusterForm, setClusterForm] = useState(createClusterForm({}));
@@ -554,112 +556,84 @@ export default function ClusterManagement() {
     );
 
   const renderClusterCard = ({ item }) => {
-    const ms = item.msStation || {};
-    const dbsStations = item.dbsStations || [];
-    const totalCapacity =
-      dbsStations.reduce((sum, station) => sum + (station.capacity || 0), 0) ||
-      "—";
+    // New API structure mapping
+    const msName = item.msName ?? "No response coming";
+    const msCode = item.msCode ?? "No response coming";
+    const msLocation = item.city ?? "No response coming";
 
+    const dbsStations = item.assignedDBS || [];
+    // If dbsStations is empty, we might want to show that too, but empty array is valid
+    
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          {/* <View>
-            <Text style={styles.clusterName}>{item.name}</Text>
-            <Text style={styles.clusterId}>{item.id}</Text>
-          </View> */}
-
           <View style={styles.msCard}>
-            <Text style={styles.msTitle}>{ms.name || ms.id}</Text>
+            <Text style={styles.msTitle}>{msName} ({msCode})</Text>
             <Text style={styles.msMeta}>
-              Location: {ms.location || "Unknown"}
+              Location: {msLocation}
             </Text>
-            {/* <Text style={styles.msMeta}>
-            Capacity: {ms.capacity != null ? ms.capacity : "—"} scm
-          </Text> */}
           </View>
           <View style={styles.clusterBadges}>
             <View style={styles.clusterBadge}>
               <Text style={styles.badgeLabel}>DBS Count</Text>
-              <Text style={styles.badgeValue}>{dbsStations.length}</Text>
+              <Text style={styles.badgeValue}>{item.linkedDbsCount ?? dbsStations.length}</Text>
             </View>
-            {/* <View style={styles.clusterBadge}>
-              <Text style={styles.badgeLabel}>Network Capacity</Text>
-              <Text style={styles.badgeValue}>{totalCapacity} scm</Text>
-            </View> */}
-            {/* <View style={styles.clusterBadge}>
-              <Text style={styles.badgeLabel}>MS Capacity</Text>
-              <Text style={styles.badgeValue}>
-                {ms.capacity != null ? ms.capacity : "—"} scm
-              </Text>
-            </View> */}
+            <View style={styles.clusterBadge}>
+              <Text style={styles.badgeLabel}>Status</Text>
+              <Text style={styles.badgeValue}>{item.status ?? "No response coming"}</Text>
+            </View>
           </View>
         </View>
-
-        {/* <View style={styles.msCard}>
-          <Text style={styles.msTitle}>{ms.name || ms.id}</Text>
-          <Text style={styles.msMeta}>
-            Location: {ms.location || "Unknown"}
-          </Text>
-          <Text style={styles.msMeta}>
-            Capacity: {ms.capacity != null ? ms.capacity : "—"} scm
-          </Text>
-        </View> */}
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
               Distribution Stations ({dbsStations.length})
             </Text>
-            {canManageClusters && (
+            {/* {canManageClusters && (
               <TouchableOpacity
                 style={styles.addDbsButton}
                 onPress={() => openAddModal(item)}
               >
                 <Text style={styles.addDbsText}>+ Add</Text>
               </TouchableOpacity>
-            )}
+            )} */}
           </View>
           <View style={styles.dbsList}>
             {dbsStations.map((station, index) => (
-              <View key={`${station.id}-${index}`} style={styles.dbsCard}>
+              <View key={`${station.dbsId || index}`} style={styles.dbsCard}>
                 <View style={styles.dbsCardContent}>
                   <View style={styles.dbsInfo}>
                     <Text style={styles.dbsCardTitle}>
-                      {station.name || "Unnamed DBS"}
+                      {station.dbsName ?? "No response coming"}
                     </Text>
-                    <Text style={styles.dbsCardId}>{station.id}</Text>
-                    {/* <Text style={styles.dbsCardCapacity}>
-                      {station.capacity != null
-                        ? `${station.capacity} scm`
-                        : "No capacity"}
-                    </Text> */}
+                    <Text style={styles.dbsCardId}>{station.dbsCode ?? "No response coming"}</Text>
+                    <Text style={styles.dbsCardCapacity}>
+                      {station.city ?? "No response coming"}
+                    </Text>
                   </View>
-                  {canManageClusters && (
+                  {/* {canManageClusters && (
                     <TouchableOpacity
                       style={styles.editDbsButton}
                       onPress={() => openEditModal(item)}
                     >
                       <Text style={styles.editDbsText}>Edit</Text>
                     </TouchableOpacity>
-                  )}
+                  )} */}
                 </View>
               </View>
             ))}
           </View>
         </View>
 
-        {/* <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notes</Text>
-          <Text style={styles.notesText}>{item.notes || "—"}</Text>
-        </View> */}
-
         <View style={styles.footerRow}>
-          <Text style={styles.footerLabel}>
-            Last updated {new Date(item.lastUpdated).toLocaleString()}
-          </Text>
-          <Text style={styles.footerRole}>
-            Manager: {item.clusterManager || "Unassigned"}
-          </Text>
+           {/* API doesn't seem to provide lastUpdated or clusterManager in new response yet, using fallback */}
+          {/* <Text style={styles.footerLabel}>
+            Last updated {item.lastUpdated ? new Date(item.lastUpdated).toLocaleString() : "No response coming"}
+          </Text> */}
+          {/* <Text style={styles.footerRole}>
+            Manager: {item.clusterManager ?? "No response coming"}
+          </Text> */}
         </View>
       </View>
     );
@@ -767,7 +741,7 @@ export default function ClusterManagement() {
                       onChangeText={(value) =>
                         handleClusterChange(index, "id", value)
                       }
-                      placeholder="DBS-09"
+                      placeholder="DBS ID"
                       autoCapitalize="characters"
                     />
                   </View>

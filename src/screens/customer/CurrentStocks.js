@@ -14,10 +14,12 @@ import { useAuth } from "../../store/auth";
 import AppIcon from "../../components/AppIcon";
 import AppButton from "../../components/AppButton";
 import { useThemedStyles } from "../../theme";
+import { useScreenPermissionSync } from "../../hooks/useScreenPermissionSync";
 
 export default function CurrentStocks() {
+  useScreenPermissionSync("CurrentStocks");
   const { user } = useAuth();
-  const dbsId = user?.dbsId ?? "DBS-09";
+  const dbsId = user?.dbsId;
   const themeRef = useRef(null);
 
   const styles = useThemedStyles((theme) => {

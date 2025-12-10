@@ -27,6 +27,7 @@ export default function RoleTabs({ navigation, route }) {
 
   // Switch to appropriate tab when a notification arrives
   useEffect(() => {
+    console.log("[RoleTabs] Mounting with role:", role);
     if (!role) return undefined;
     let off = null;
     if (role === "DBS_OPERATOR") {
@@ -99,6 +100,59 @@ export default function RoleTabs({ navigation, route }) {
           dbsId: last.dbsId,
           vehicleId: last.vehicleId,
         });
+      }
+    } else if (role === "EIC") {
+      console.log("[RoleTabs] Setting up EIC listeners");
+      // Handle STOCK_REQUEST / driver_response for EIC
+      const handleEicNav = (data) => {
+        console.log("[RoleTabs] handleEicNav received:", JSON.stringify(data));
+        try {
+          // If it's a stock request, go to StockRequests tab
+          if (data?.type === "STOCK_REQUEST" || data?.notification_type === "stock_request" || data?.dbsName) {
+             console.log("[RoleTabs] Navigating to StockRequests (STOCK_REQUEST)");
+             // ensure correct route name: StockRequests
+             navigation?.navigate("StockRequests", {
+                fromNotification: true,
+                ...data
+             });
+          }
+          // If it's a driver response, go to StockRequests tab
+          else if (data?.type === "driver_response" || data?.action === "ACCEPTED" || data?.action === "REJECTED") {
+             console.log("[RoleTabs] Navigating to StockRequests (driver_response)");
+             navigation?.navigate("StockRequests", {
+                fromNotification: true,
+                ...data
+             });
+          }
+        } catch (e) {
+          console.warn("[RoleTabs] EIC Nav Error", e);
+        }
+      };
+
+      const offStock = NotificationService.addListener("stock_request", (d) => {
+         console.log("[RoleTabs] Listener received stock_request");
+         handleEicNav(d);
+      });
+      const offDriver = NotificationService.addListener("driver_response", (d) => {
+         console.log("[RoleTabs] Listener received driver_response");
+         handleEicNav(d);
+      });
+      
+      off = () => {
+        offStock();
+        offDriver();
+      };
+
+      // Check last events
+      const lastStock = NotificationService.getLastEvent("stock_request");
+      if (lastStock) {
+        console.log("[RoleTabs] Found last event stock_request");
+        handleEicNav(lastStock);
+      }
+      const lastDriver = NotificationService.getLastEvent("driver_response");
+      if (lastDriver) {
+        console.log("[RoleTabs] Found last event driver_response");
+        handleEicNav(lastDriver);
       }
     }
     return () => off && off();

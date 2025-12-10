@@ -61,40 +61,27 @@ class NotificationService {
       return;
     }
     
-
-    
     try {
-      // Method 1: Use CommonActions for more reliable nested navigation
-      const { CommonActions } = require("@react-navigation/native");
-      
-      this.navigationRef.dispatch(
-        CommonActions.navigate({
-          name: "App",
-          params: {
-            screen: tabName,
-            params: params,
-          },
-        })
-      );
-
+      // Method 1: Try direct global navigation first
+      // This works best if the screen name 'tabName' is unique in the navigator hierarchy
+      this.navigationRef.navigate(tabName, params);
     } catch (error1) {
-      console.warn("[NotificationService] CommonActions failed:", error1?.message);
+      console.warn("[NotificationService] Direct navigate failed, trying nested:", error1?.message);
       
-      // Method 2: Try direct navigation
+      // Method 2: Try explicit nested navigation targeting 'App' root
       try {
-        this.navigationRef.navigate("App", {
-          screen: tabName,
-          params,
-        });
+        const { CommonActions } = require("@react-navigation/native");
+        this.navigationRef.dispatch(
+          CommonActions.navigate({
+            name: "App",
+            params: {
+              screen: tabName,
+              params: params,
+            },
+          })
+        );
       } catch (error2) {
         console.warn("[NotificationService] Nested navigate failed:", error2?.message);
-        
-        // Method 3: Try direct tab navigation
-        try {
-          this.navigationRef.navigate(tabName, params);
-        } catch (error3) {
-          console.warn("[NotificationService] Direct navigate failed:", error3?.message);
-        }
       }
     }
   }
@@ -195,7 +182,6 @@ class NotificationService {
       if (Platform.OS === "android") {
         const { status } = await Notifications.requestPermissionsAsync();
         if (status !== "granted") {
-
           return false;
         }
       }
@@ -222,12 +208,57 @@ class NotificationService {
     }
   }
 
+  // Check current notification permissions without requesting
+  async checkPermission() {
+    try {
+      // 1. Check Expo/System permissions (covers Android 13+ operational status)
+      const settings = await Notifications.getPermissionsAsync();
+      
+      // If system permission is denied explicitly, return false
+      if (
+        settings.status !== "granted" &&
+        settings.status !== "undetermined" // treating undetermined as 'not granted yet', but usually for check we want 'granted'
+      ) {
+         return false;
+      }
+       // If specifically undetermined, we might want to return false so we force a request,
+       // but for a "blocking screen" logic, usually 'denied' is the trigger. 
+       // However, user wants "if someone doesnot allow... dont show me anything".
+       // So if strictly NOT granted, return false.
+      if (settings.status !== 'granted') {
+          return false;
+      }
+
+      // 2. Check Firebase permissions (optional but good for iOS/FCM alignment)
+      if (messaging) {
+        const authStatus = await messaging().hasPermission();
+        const enabled =
+          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+          
+        if (!enabled) return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error checking notification permission:", error);
+      // specific fallback: if error, assume false to be safe or true to not block?
+      // creating a block is safer for logic "mandatory"
+      return false;
+    }
+  }
+
   // Whether notifications are limited (Expo Go or no FCM)
   areNotificationsLimited() {
-    // In Expo Go, Constants.appOwnership === 'expo'; dev client may be 'guest'. Standalone is EAS build.
-    const ownership = Constants?.appOwnership || "unknown";
-    const isStandalone = ownership === "standalone";
-    return this.limitedNotifications || !isStandalone || !messaging;
+    // If Firebase messaging is available, we are definitely NATIVE and capable.
+    if (messaging) return false;
+
+    // Fallback: In Expo Go, Constants.appOwnership === 'expo'.
+    // 'guest' (dev client) or 'standalone' (prod) or 'unknown' (sometimes EAS) might be native.
+    const ownership = Constants?.appOwnership;
+    const isNative = ownership === "standalone" || ownership === "guest";
+    
+    return this.limitedNotifications || !isNative;
   }
 
   // Get device token
@@ -505,9 +536,15 @@ class NotificationService {
 
   // Handle notification tap logic
   handleNotificationTap(data) {
+    console.log("[NotificationService] handleNotificationTap CALL with data:", JSON.stringify(data));
 
     const user = this.getCurrentUser();
-    if (!data) return;
+    if (!data) {
+        console.log("[NotificationService] No data in notification, ignoring.");
+        return;
+    };
+    
+    console.log(`[NotificationService] Processing type: ${data.type} for Role: ${user?.role}`);
     
 
     
@@ -518,12 +555,12 @@ class NotificationService {
 
       const eventPayload = {
         tripId: data.stock_request_id || data.tripId,
-        dbsId: data.to_dbs || data.dbs_name || data.dbsId || "Unknown DBS", // Map to_dbs from backend
+        dbsId: data.to_dbs || data.dbs_name || data.dbsId, // Map to_dbs from backend
         dbsIdRaw: data.dbs_id, // Store raw ID for API calls
         quantity: data.quantity_kg || data.quantity,
         priority: data.priority,
         msId: data.from_ms || data.msId || "MS-001", // Map from_ms from backend
-        vehicleId: data.vehicleId || "Unknown",
+        vehicleId: data.vehicleId,
         ...data,
       };
       
@@ -558,14 +595,18 @@ class NotificationService {
       const params = {
         fromNotification: true,
         type: "dbs_arrival",
-        tripId: data.tripId,
-        dbsId: data.dbsId,
-        driverId: data.driverId,
+        tripId: data.tripId || data.trip_id,
+        dbsId: data.dbsId || data.dbs_id,
+        driverId: data.driverId || data.driver_id,
+        token: data.tripToken || data.token || data.trip_token, // Map tripToken
+        vehicleNo: data.truckNumber || data.vehicleNo || data.truck_number, 
       };
       const eventPayload = {
-        tripId: data.tripId,
-        dbsId: data.dbsId,
-        driverId: data.driverId,
+        tripId: data.tripId || data.trip_id,
+        dbsId: data.dbsId || data.dbs_id,
+        driverId: data.driverId || data.driver_id,
+        token: data.tripToken || data.token || data.trip_token,
+        vehicleNo: data.truckNumber || data.vehicleNo || data.truck_number,
       };
       if (user?.role === "DBS_OPERATOR" && this.navigationRef) {
         this.navigateToTab("Decanting", params);
@@ -595,6 +636,8 @@ class NotificationService {
         tripId: data.tripId,
         driverId: data.driverId,
         stationId: data.stationId,
+        token: data.tripToken || data.token, // Map tripToken to token
+        vehicleNo: data.truckNumber, 
       };
       if (user?.role === "MS_OPERATOR" && this.navigationRef) {
         this.navigateToTab("Operations", params);
@@ -602,6 +645,8 @@ class NotificationService {
           tripId: data.tripId,
           driverId: data.driverId,
           stationId: data.stationId,
+          token: data.tripToken || data.token, // Map tripToken to token
+          vehicleNo: data.truckNumber,
         });
       } else {
         this._queuePendingIntent({
@@ -734,8 +779,6 @@ class NotificationService {
         driverAction: data.driverAction, // alternate key
       };
       
-
-      
       // Emit event for EIC screen to handle
       this.emit("driver_response", eventPayload);
       
@@ -760,6 +803,81 @@ class NotificationService {
       }
       return;
     }
+
+    // Assignment Expired notifications (Driver did not respond)
+    if (data.type === "ASSIGNMENT_EXPIRED") {
+      const eventPayload = {
+        requestId: data.stock_request_id,
+        driverId: data.driver_id,
+        driverName: data.driver_name,
+        dbsName: data.dbs_name,
+        action: data.action, // REASSIGN_REQUIRED
+        type: data.type,
+      };
+
+      // Emit generic driver_response so IncomingStockRequests picks it up
+      this.emit("driver_response", eventPayload);
+
+      // Navigate if needed
+      if (user?.role === "EIC") {
+        if (this.navigationRef) {
+          this.navigateToTab("StockRequests", {
+            fromNotification: true,
+            ...eventPayload,
+          });
+        } else {
+          this._queuePendingIntent({
+            tabName: "StockRequests",
+            params: { fromNotification: true, ...eventPayload },
+            event: "driver_response",
+            eventData: eventPayload,
+          });
+        }
+      }
+      return;
+    }
+
+      // EIC Stock Request notifications
+    if (data.type === "STOCK_REQUEST" || data.notification_type === "stock_request") {
+      console.log("[NotificationService] Handling STOCK_REQUEST:", JSON.stringify(data));
+      const eventPayload = {
+        requestId: data.stockRequestId,
+        dbsId: data.dbsId,
+        dbsName: data.dbsName,
+        msId: data.msId,
+        msName: data.msName,
+        ...data,
+      };
+
+      // Emit event for EIC screen to handle
+      console.log("[NotificationService] Emitting stock_request event");
+      this.emit("stock_request", eventPayload);
+
+      // Navigate to StockRequests if EIC
+      // Note: We use "StockRequests" because that is the route name in EICNavigator.js
+      // DO NOT CHANGE IT TO "IncomingStockRequests"
+      if (user?.role === "EIC" && this.navigationRef) {
+        console.log("[NotificationService] Executing direct navigation to StockRequests");
+        this.navigateToTab("StockRequests", {
+          fromNotification: true,
+          type: "stock_request",
+          ...eventPayload,
+        });
+      } else {
+        console.log("[NotificationService] User not EIC or nav ref missing, queuing intent");
+        this._queuePendingIntent({
+          tabName: "StockRequests",
+          params: {
+            fromNotification: true,
+            type: "stock_request",
+            ...eventPayload,
+          },
+          event: "stock_request",
+          eventData: eventPayload,
+        });
+      }
+      return;
+    }
   }
 
   // Initialize all notification handlers
@@ -767,8 +885,8 @@ class NotificationService {
     try {
       // Detect limited environment early
       const ownership = Constants?.appOwnership || "unknown";
-      const isStandalone = ownership === "standalone";
-      this.limitedNotifications = !isStandalone || !messaging;
+      // Trust messaging: if it exists, we are not limited.
+      this.limitedNotifications = !messaging;
 
       // Configure notification handler to suppress system alerts in foreground
       // This ensures we only show our custom in-app alert (Accept/Reject)
@@ -819,8 +937,8 @@ class NotificationService {
   async initializeForDBS(userId) {
     try {
       const ownership = Constants?.appOwnership || "unknown";
-      const isStandalone = ownership === "standalone";
-      this.limitedNotifications = !isStandalone || !messaging;
+      // Trust messaging: if it exists, we are not limited.
+      this.limitedNotifications = !messaging;
 
       const hasPermission = await this.requestPermission();
       if (!hasPermission) return false;
@@ -849,8 +967,8 @@ class NotificationService {
   async initializeForMS(userId) {
     try {
       const ownership = Constants?.appOwnership || "unknown";
-      const isStandalone = ownership === "standalone";
-      this.limitedNotifications = !isStandalone || !messaging;
+      // Trust messaging: if it exists, we are not limited.
+      this.limitedNotifications = !messaging;
 
       const hasPermission = await this.requestPermission();
       if (!hasPermission) return false;
@@ -870,10 +988,7 @@ class NotificationService {
 
       // Friendly notice for Expo Go/dev client to keep UX flow working
       if (this.areNotificationsLimited()) {
-        Alert.alert(
-          "Expo Go mode",
-          "Push notifications are limited in Expo Go. You can still test the MS flow by opening the Operations tab; the app will enable a test path without push."
-        );
+       console.log("[NotificationService] Notifications limited in MS role");
       }
       return true;
     } catch (e) {
@@ -886,8 +1001,8 @@ class NotificationService {
   async initializeForEIC(userId) {
     try {
       const ownership = Constants?.appOwnership || "unknown";
-      const isStandalone = ownership === "standalone";
-      this.limitedNotifications = !isStandalone || !messaging;
+      // Trust messaging: if it exists, we are not limited.
+      this.limitedNotifications = !messaging;
 
       const hasPermission = await this.requestPermission();
       if (!hasPermission) return false;
